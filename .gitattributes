@@ -1,0 +1,26 @@
+# Ensure source files use LF line endings and UTF-8 encoding in the repo
+# This helps avoid encoding/CRLF issues across platforms.
+
+# Text files we edit
+*.dart text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.gradle text eol=lf
+*.xml text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+
+# Force text mode for project metadata
+pubspec.* text eol=lf
+
+# Optional: ensure working-tree encoding is UTF-8 where supported
+# (Git versions that support working-tree-encoding will respect this)
+*.dart working-tree-encoding=UTF-8
+*.yaml working-tree-encoding=UTF-8
+*.md working-tree-encoding=UTF-8
