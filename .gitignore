@@ -1,4 +1,4 @@
-# See https://www.dartlang.org/guides/libraries/private-files
+:q!# See https://www.dartlang.org/guides/libraries/private-files
 
 # Files and directories created by pub
 .dart_tool/
@@ -27,3 +27,66 @@ doc/api/
 
 .flutter-plugins
 .flutter-plugins-dependencies
+=======
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+
+# IDEs and editors
+*.iml
+.idea/
+.vscode/
+.history/
+
+# Lock files (optional for apps; uncomment to keep lockfile in repo)
+# pubspec.lock
+
+# Generated plugin registrants and native artifacts
+**/GeneratedPluginRegistrant.*
+**/Pods/
+**/.symlinks/
+
+# Xcode
+**/xcuserdata/
+**/*.pbxuser
+**/*.mode1v3
+**/*.mode2v3
+**/*.perspectivev3
+**/DerivedData/
+
+# Keystores and secrets
+*.jks
+*.keystore
+.env
+
+# Gradle
+local.properties
+/.gradle/
+**/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build outputs and native bundles
+**/build/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+
+# Misc
+*.log
+*.seed
+
+# Project docs and planning
+ROADMAP.md
+
+# Ensure we don't accidentally commit large caches
+.pub-cache/
+.android/
+.packages
