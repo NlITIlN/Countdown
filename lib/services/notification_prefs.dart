@@ -20,20 +20,34 @@ class NotificationPrefs {
     await _prefs.setBool(_vibrateKey, enabled);
   }
 
-  // Achievement dedupe: each type is shown at most once per day.
-  static const _achievementDayPrefix = 'notification_achievement_day_';
+  static const _enabledKey = 'notifications_enabled';
 
-  bool achievementShownToday(String type) =>
-      _prefs.getString('$_achievementDayPrefix$type') ==
-      _dayKey(DateTime.now());
+  /// Главный выключатель: false — никаких уведомлений (статистика и награды
+  /// всё равно считаются).
+  bool notificationsEnabled() => _prefs.getBool(_enabledKey) ?? true;
 
-  Future<void> markAchievementShown(String type) async {
-    await _prefs.setString(
-      '$_achievementDayPrefix$type',
-      _dayKey(DateTime.now()),
-    );
+  Future<void> saveNotificationsEnabled(bool enabled) async {
+    await _prefs.setBool(_enabledKey, enabled);
   }
 
-  static String _dayKey(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  static const _permissionAskedKey = 'notification_permission_asked';
+
+  /// Разрешение спрашиваем один раз — при первом запуске таймера.
+  bool permissionAsked() => _prefs.getBool(_permissionAskedKey) ?? false;
+
+  Future<void> markPermissionAsked() async {
+    await _prefs.setBool(_permissionAskedKey, true);
+  }
+
+  // Achievement dedupe: each type is shown at most once per period
+  // (day / week / month key from AchievementRules). The prefix keeps its
+  // historic name so flags saved by older versions still apply.
+  static const _achievementPrefix = 'notification_achievement_day_';
+
+  bool achievementShownIn(String type, String period) =>
+      _prefs.getString('$_achievementPrefix$type') == period;
+
+  Future<void> markAchievementShown(String type, String period) async {
+    await _prefs.setString('$_achievementPrefix$type', period);
+  }
 }

@@ -58,6 +58,14 @@ class UsageStore {
     await _prefs.setInt(_totalKey, total);
   }
 
+  /// Удаляет всю историю запусков и общий счётчик (настройки → «Очистить
+  /// статистику»).
+  Future<void> clear() async {
+    _cache = [];
+    await _prefs.remove(_key);
+    await _prefs.remove(_totalKey);
+  }
+
   Future<UsageStats> loadStats() async {
     final events = await _loadEvents();
     return UsageStats.fromTimestamps(events, totalCount: _loadTotal(events));

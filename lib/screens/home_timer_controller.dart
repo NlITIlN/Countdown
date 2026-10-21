@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 
 import '../l10n/strings.dart';
 import '../l10n/strings_plurals.dart';
+import '../models/achievement_rules.dart';
 import '../models/usage_stats.dart';
 import '../services/notification_prefs.dart';
 import '../services/notification_service.dart';
+import '../services/screen_awake.dart';
 import '../services/timer_prefs.dart';
 import '../services/usage_store.dart';
 
@@ -21,13 +23,15 @@ class HomeTimerController extends ChangeNotifier {
     required this.notificationPrefs,
     required this.localeIsRu,
     this.completionHold = const Duration(seconds: 3),
-  });
+    ScreenAwake? screenAwake,
+  }) : screenAwake = screenAwake ?? ScreenAwake();
 
   final TimerPrefs timerPrefs;
   final UsageStore usageStore;
   final NotificationService notifications;
   final NotificationPrefs notificationPrefs;
   final bool Function() localeIsRu;
+  final ScreenAwake screenAwake;
 
   /// Сколько держится состояние completed перед возвратом в idle.
   final Duration completionHold;
@@ -35,8 +39,8 @@ class HomeTimerController extends ChangeNotifier {
   /// Последние секунды, когда кольца пульсируют.
   static const _criticalSeconds = 10;
 
-  int totalSeconds = TimerPrefs.defaultMinutes * 60;
-  int remainingSeconds = TimerPrefs.defaultMinutes * 60;
+  int totalSeconds = TimerPrefs.defaultSeconds;
+  int remainingSeconds = TimerPrefs.defaultSeconds;
   bool running = false;
   bool ready = false;
   TimerState currentState = TimerState.idle;
@@ -48,8 +52,12 @@ class HomeTimerController extends ChangeNotifier {
   bool _completing = false;
 
   bool get canEdit => !running;
-  double get progress =>
-      totalSeconds == 0 || !running ? 0 : remainingSeconds / totalSeconds;
+
+  /// Время окончания текущего отсчёта (null — таймер не идёт).
+  /// По нему кнопка сама плавно считает прогресс на каждом кадре.
+  DateTime? get endsAt => running ? timerPrefs.loadEndsAt() : null;
+
+  Duration get totalDuration => Duration(seconds: totalSeconds);
 
   String get timeText {
     final seconds = remainingSeconds;
@@ -71,8 +79,7 @@ class HomeTimerController extends ChangeNotifier {
   Future<void> bootstrap() async {
     final isRu = localeIsRu();
     try {
-      final minutes = timerPrefs.loadMinutes();
-      final total = minutes * 60;
+      final total = timerPrefs.loadSeconds();
       var remaining = total;
       var active = false;
 
@@ -101,17 +108,12 @@ class HomeTimerController extends ChangeNotifier {
               : TimerState.running;
       ready = true;
       _notifyUpdate();
+      _applyScreenAwake();
 
       if (active) {
         final restoredEndsAt = timerPrefs.loadEndsAt();
         if (restoredEndsAt != null) {
-          await notifications.scheduleSteps(
-            endsAt: restoredEndsAt,
-            totalSeconds: total,
-            isRu: isRu,
-            playSound: notificationPrefs.soundEnabled(),
-            vibrate: notificationPrefs.vibrationEnabled(),
-          );
+          await _scheduleDone(restoredEndsAt, total);
         }
         _startTicker();
       }
@@ -119,40 +121,37 @@ class HomeTimerController extends ChangeNotifier {
       if (kDebugMode) {
         debugPrint('bootstrap failed: $e\n$st');
       }
-      totalSeconds = TimerPrefs.defaultMinutes * 60;
-      remainingSeconds = TimerPrefs.defaultMinutes * 60;
+      totalSeconds = TimerPrefs.defaultSeconds;
+      remainingSeconds = TimerPrefs.defaultSeconds;
       running = false;
       ready = true;
       _notifyUpdate();
     }
   }
 
-  Future<void> setMinutes(int minutes) async {
+  Future<void> setDurationSeconds(int seconds) async {
     if (!canEdit) return;
-    final clamped = TimerPrefs.clampMinutes(minutes);
-    final seconds = clamped * 60;
-    await timerPrefs.saveMinutes(clamped);
-    totalSeconds = seconds;
-    remainingSeconds = seconds;
+    final clamped = TimerPrefs.clampSeconds(seconds);
+    await timerPrefs.saveSeconds(clamped);
+    totalSeconds = clamped;
+    remainingSeconds = clamped;
     _notifyUpdate();
   }
 
   Future<void> start() async {
     _idleTimer?.cancel();
-    final seconds = remainingSeconds.clamp(1, TimerPrefs.maxMinutes * 60);
+    if (notificationPrefs.notificationsEnabled()) {
+      await _ensurePermissionAsked();
+    }
+    final seconds = remainingSeconds.clamp(1, TimerPrefs.maxSeconds);
     final endsAt = DateTime.now().add(Duration(seconds: seconds));
     await timerPrefs.saveEndsAt(endsAt);
 
-    await notifications.scheduleSteps(
-      endsAt: endsAt,
-      totalSeconds: seconds,
-      isRu: localeIsRu(),
-      playSound: notificationPrefs.soundEnabled(),
-      vibrate: notificationPrefs.vibrationEnabled(),
-    );
+    await _scheduleDone(endsAt, seconds);
 
     running = true;
     _setState(TimerState.running);
+    _applyScreenAwake();
     _startTicker();
   }
 
@@ -182,6 +181,47 @@ class HomeTimerController extends ChangeNotifier {
     }
   }
 
+  /// Главный выключатель уведомлений (настройки). Выключение отменяет
+  /// запланированное уведомление, включение — спрашивает разрешение (если ещё
+  /// не спрашивали) и планирует уведомление для идущего отсчёта.
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    await notificationPrefs.saveNotificationsEnabled(enabled);
+    if (!enabled) {
+      await notifications.cancelSteps();
+      return;
+    }
+    await _ensurePermissionAsked();
+    final endsAt = this.endsAt;
+    if (endsAt != null) await _scheduleDone(endsAt, totalSeconds);
+  }
+
+  /// Системный диалог разрешения — один раз за всё время.
+  Future<void> _ensurePermissionAsked() async {
+    if (notificationPrefs.permissionAsked()) return;
+    await notifications.requestPermission();
+    await notificationPrefs.markPermissionAsked();
+  }
+
+  Future<void> _scheduleDone(DateTime endsAt, int totalSeconds) async {
+    if (!notificationPrefs.notificationsEnabled()) return;
+    await notifications.scheduleSteps(
+      endsAt: endsAt,
+      totalSeconds: totalSeconds,
+      isRu: localeIsRu(),
+      playSound: notificationPrefs.soundEnabled(),
+      vibrate: notificationPrefs.vibrationEnabled(),
+    );
+  }
+
+  /// Экран не гаснет только пока идёт отсчёт и включена настройка.
+  void _applyScreenAwake() =>
+      screenAwake.set(running && timerPrefs.keepScreenOn());
+
+  Future<void> setKeepScreenOn(bool on) async {
+    await timerPrefs.saveKeepScreenOn(on);
+    _applyScreenAwake();
+  }
+
   Future<void> reset() async {
     _ticker?.cancel();
     await notifications.cancelSteps();
@@ -189,6 +229,7 @@ class HomeTimerController extends ChangeNotifier {
     running = false;
     remainingSeconds = totalSeconds;
     _setState(TimerState.idle);
+    _applyScreenAwake();
   }
 
   Future<void> handleCompletion({required bool notify}) async {
@@ -196,7 +237,6 @@ class HomeTimerController extends ChangeNotifier {
     _completing = true;
     try {
       _ticker?.cancel();
-      await notifications.cancelSteps();
       await timerPrefs.clearEndsAt();
 
       final before = await usageStore.loadStats();
@@ -206,6 +246,7 @@ class HomeTimerController extends ChangeNotifier {
       running = false;
       remainingSeconds = totalSeconds;
       _setState(TimerState.completed);
+      _applyScreenAwake();
 
       // Возврат в idle после анимации — только если за это время не запустили новый таймер.
       _idleTimer?.cancel();
@@ -213,15 +254,19 @@ class HomeTimerController extends ChangeNotifier {
         if (currentState == TimerState.completed) _setState(TimerState.idle);
       });
 
-      if (notify) {
-        if (notificationPrefs.vibrationEnabled()) {
-          HapticFeedback.heavyImpact();
-        }
-        await notifications.showDone(
+      if (notify && notificationPrefs.vibrationEnabled()) {
+        HapticFeedback.heavyImpact();
+      }
+      if (notify && notificationPrefs.notificationsEnabled()) {
+        // Ровно одно уведомление: запланированное, если система его уже
+        // показала, иначе — сейчас.
+        await notifications.deliverDone(
           isRu: localeIsRu(),
           playSound: notificationPrefs.soundEnabled(),
           vibrate: notificationPrefs.vibrationEnabled(),
         );
+      } else {
+        await notifications.cancelSteps();
       }
       await _notifyMilestones(before, after, localeIsRu());
     } finally {
@@ -234,12 +279,14 @@ class HomeTimerController extends ChangeNotifier {
       UsageStats before, UsageStats after, bool isRu) async {
     for (final milestone in [10, 25, 50, 100]) {
       if (before.totalCount < milestone && after.totalCount >= milestone) {
-        await notifications.showBadge(
-          count: milestone,
-          isRu: isRu,
-          playSound: notificationPrefs.soundEnabled(),
-          vibrate: notificationPrefs.vibrationEnabled(),
-        );
+        if (notificationPrefs.notificationsEnabled()) {
+          await notifications.showBadge(
+            count: milestone,
+            isRu: isRu,
+            playSound: notificationPrefs.soundEnabled(),
+            vibrate: notificationPrefs.vibrationEnabled(),
+          );
+        }
         return;
       }
     }
@@ -247,13 +294,15 @@ class HomeTimerController extends ChangeNotifier {
     await _checkAchievements(before, after, isRu);
   }
 
-  /// Каждый тип достижения показывается не чаще раза в день, за раз — только одно.
+  /// Каждый тип достижения — не чаще раза за свой период (день / неделя /
+  /// месяц), за одно завершение — только одно.
   Future<void> _checkAchievements(
       UsageStats before, UsageStats after, bool isRu) async {
     final s = S.forRu(isRu);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final todayCount = after.getTodayCount();
+    final day = AchievementRules.dayKey(now);
 
     // 1. Рекорд дня: сегодня больше, чем лучший из прошлых дней (первый запуск — не рекорд).
     final prevBest = after.days
@@ -262,6 +311,7 @@ class HomeTimerController extends ChangeNotifier {
     if (prevBest > 0 && todayCount > prevBest) {
       if (await _showAchievementOnce(
         'record',
+        period: day,
         title: s.achievementRecordTitle,
         body: s.achievementRecordBody(todayCount, prevBest),
       )) {
@@ -273,6 +323,7 @@ class HomeTimerController extends ChangeNotifier {
     if (after.streakDays >= 3 && after.streakDays > before.streakDays) {
       if (await _showAchievementOnce(
         'streak',
+        period: day,
         title: s.achievementStreakTitle,
         body: s.achievementStreakBody(after.streakDays),
       )) {
@@ -284,29 +335,57 @@ class HomeTimerController extends ChangeNotifier {
     if (todayCount == 1 && before.days.isNotEmpty) {
       final lastActive = before.days.first.date;
       if (today.difference(lastActive).inDays > 3) {
-        await _showAchievementOnce(
+        if (await _showAchievementOnce(
           'comeback',
+          period: day,
           title: s.achievementComebackTitle,
           body: s.achievementComebackBody,
-        );
+        )) {
+          return;
+        }
       }
+    }
+
+    // 4. Сильная неделя — раз в неделю.
+    final weekCount = AchievementRules.strongWeek(after, now);
+    if (weekCount != null) {
+      if (await _showAchievementOnce(
+        'strong_week',
+        period: AchievementRules.weekKey(now),
+        title: s.achievementStrongWeekTitle,
+        body: s.achievementStrongWeekBody(weekCount),
+      )) {
+        return;
+      }
+    }
+
+    // 5. Месяц идёт вверх — раз в месяц, с 15-го числа.
+    if (AchievementRules.monthUp(after, now)) {
+      await _showAchievementOnce(
+        'month_up',
+        period: AchievementRules.monthKey(now),
+        title: s.achievementMonthUpTitle,
+        body: s.achievementMonthUpBody,
+      );
     }
   }
 
   Future<bool> _showAchievementOnce(
     String type, {
+    required String period,
     required String title,
     required String body,
   }) async {
     final prefs = notificationPrefs;
-    if (prefs.achievementShownToday(type)) return false;
+    if (!prefs.notificationsEnabled()) return false;
+    if (prefs.achievementShownIn(type, period)) return false;
     await notifications.showAchievement(
       title: title,
       body: body,
       playSound: prefs.soundEnabled(),
       vibrate: prefs.vibrationEnabled(),
     );
-    await prefs.markAchievementShown(type);
+    await prefs.markAchievementShown(type, period);
     return true;
   }
 
@@ -314,6 +393,7 @@ class HomeTimerController extends ChangeNotifier {
   void dispose() {
     _ticker?.cancel();
     _idleTimer?.cancel();
+    screenAwake.set(false);
     super.dispose();
   }
 }

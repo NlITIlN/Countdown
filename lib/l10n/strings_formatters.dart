@@ -1,26 +1,15 @@
+import 'package:intl/intl.dart';
+
 import 'strings.dart';
 
 extension FormatterExtensions on S {
-  String formatDay(DateTime date) {
-    final d = date.day.toString().padLeft(2, '0');
-    final m = date.month.toString().padLeft(2, '0');
-    final y = date.year;
-    if (isRu) return '$d.$m.$y';
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[date.month - 1]} $d, $y';
+  /// «21 окт.» / «Oct 21» в текущем году, с годом — для прошлых лет.
+  String formatDay(DateTime date, {DateTime? now}) {
+    final sameYear = date.year == (now ?? DateTime.now()).year;
+    final format = sameYear
+        ? DateFormat.MMMd(languageCode)
+        : DateFormat.yMMMd(languageCode);
+    return format.format(date);
   }
 
   String badgeTitle(String key) {

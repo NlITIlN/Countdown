@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_info.dart';
 import '../l10n/strings.dart';
 import '../services/notification_prefs.dart';
 import '../services/timer_prefs.dart';
@@ -10,24 +11,34 @@ class ControlPanel extends StatefulWidget {
   const ControlPanel({
     super.key,
     required this.strings,
-    required this.initialMinutes,
+    required this.initialSeconds,
     required this.running,
     required this.notificationPrefs,
     required this.onTimerApply,
     required this.onLocaleChanged,
     required this.themeMode,
     required this.onThemeChanged,
+    required this.onNotificationsChanged,
+    required this.keepScreenOn,
+    required this.onKeepScreenOnChanged,
+    required this.onClearStatistics,
     this.onReset,
   });
 
   final S strings;
-  final int initialMinutes;
+
+  /// Длительность таймера в секундах.
+  final int initialSeconds;
   final bool running;
   final NotificationPrefs notificationPrefs;
   final ValueChanged<int> onTimerApply;
   final ValueChanged<AppLocale> onLocaleChanged;
   final AppThemeMode themeMode;
   final ValueChanged<AppThemeMode> onThemeChanged;
+  final ValueChanged<bool> onNotificationsChanged;
+  final bool keepScreenOn;
+  final ValueChanged<bool> onKeepScreenOnChanged;
+  final Future<void> Function() onClearStatistics;
   final VoidCallback? onReset;
 
   @override
@@ -37,7 +48,9 @@ class ControlPanel extends StatefulWidget {
 class _ControlPanelState extends State<ControlPanel>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late int _minutes;
+  late int _seconds;
+  late bool _notificationsEnabled;
+  late bool _keepScreenOn;
   late bool _soundEnabled;
   late bool _vibrationEnabled;
 
@@ -45,7 +58,9 @@ class _ControlPanelState extends State<ControlPanel>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _minutes = widget.initialMinutes;
+    _seconds = widget.initialSeconds;
+    _notificationsEnabled = widget.notificationPrefs.notificationsEnabled();
+    _keepScreenOn = widget.keepScreenOn;
     _soundEnabled = widget.notificationPrefs.soundEnabled();
     _vibrationEnabled = widget.notificationPrefs.vibrationEnabled();
   }
@@ -54,6 +69,16 @@ class _ControlPanelState extends State<ControlPanel>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _setKeepScreenOn(bool on) {
+    setState(() => _keepScreenOn = on);
+    widget.onKeepScreenOnChanged(on);
+  }
+
+  void _setNotificationsEnabled(bool enabled) {
+    setState(() => _notificationsEnabled = enabled);
+    widget.onNotificationsChanged(enabled);
   }
 
   Future<void> _setSoundEnabled(bool enabled) async {
@@ -116,9 +141,9 @@ class _ControlPanelState extends State<ControlPanel>
                 // Timer tab
                 _TimerTabContent(
                   strings: s,
-                  initialMinutes: _minutes,
+                  seconds: _seconds,
                   running: widget.running,
-                  onMinutesChanged: (m) => setState(() => _minutes = m),
+                  onSecondsChanged: (v) => setState(() => _seconds = v),
                   onApply: widget.onTimerApply,
                   onReset: widget.onReset,
                   scale: scale,
@@ -126,10 +151,15 @@ class _ControlPanelState extends State<ControlPanel>
                 // Settings tab
                 _SettingsTabContent(
                   strings: s,
+                  notificationsEnabled: _notificationsEnabled,
                   soundEnabled: _soundEnabled,
                   vibrationEnabled: _vibrationEnabled,
                   themeMode: widget.themeMode,
                   onThemeChanged: widget.onThemeChanged,
+                  onNotificationsChanged: _setNotificationsEnabled,
+                  keepScreenOn: _keepScreenOn,
+                  onKeepScreenOnChanged: _setKeepScreenOn,
+                  onClearStatistics: widget.onClearStatistics,
                   onSoundChanged: _setSoundEnabled,
                   onVibrationChanged: _setVibrationEnabled,
                   onLocaleChanged: widget.onLocaleChanged,
@@ -147,18 +177,18 @@ class _ControlPanelState extends State<ControlPanel>
 class _TimerTabContent extends StatelessWidget {
   const _TimerTabContent({
     required this.strings,
-    required this.initialMinutes,
+    required this.seconds,
     required this.running,
-    required this.onMinutesChanged,
+    required this.onSecondsChanged,
     required this.onApply,
     required this.onReset,
     required this.scale,
   });
 
   final S strings;
-  final int initialMinutes;
+  final int seconds;
   final bool running;
-  final ValueChanged<int> onMinutesChanged;
+  final ValueChanged<int> onSecondsChanged;
   final ValueChanged<int> onApply;
   final VoidCallback? onReset;
   final double scale;
@@ -169,7 +199,7 @@ class _TimerTabContent extends StatelessWidget {
       child: Column(
         children: [
           Text(
-            strings.setMinutes,
+            strings.setDuration,
             style: TextStyle(
               fontSize: 13 * scale,
               fontWeight: FontWeight.w400,
@@ -186,13 +216,14 @@ class _TimerTabContent extends StatelessWidget {
             spacing: 10 * scale,
             runSpacing: 10 * scale,
             children: [
-              for (var preset = TimerPrefs.minMinutes;
-                  preset <= TimerPrefs.maxMinutes;
+              // Пресеты — целые минуты; точнее — кнопками ± и слайдером.
+              for (var preset = 1;
+                  preset <= TimerPrefs.maxSeconds ~/ 60;
                   preset++)
                 _PresetButton(
                   minutes: preset,
-                  selected: initialMinutes == preset,
-                  onTap: () => onMinutesChanged(preset),
+                  selected: seconds == preset * 60,
+                  onTap: () => onSecondsChanged(preset * 60),
                   scale: scale,
                 ),
             ],
@@ -203,30 +234,33 @@ class _TimerTabContent extends StatelessWidget {
             children: [
               _SheetIconButton(
                 icon: Icons.remove,
-                onTap: () => onMinutesChanged(
-                  TimerPrefs.clampMinutes(initialMinutes - 1),
+                onTap: () => onSecondsChanged(
+                  TimerPrefs.clampSeconds(seconds - TimerPrefs.stepSeconds),
                 ),
               ),
               SizedBox(width: 28 * scale),
               Flexible(
-                child: Text(
-                  strings.minutesLabel(initialMinutes).toLowerCase(),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 40 * scale,
-                    fontWeight: FontWeight.w300,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.9),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    strings.durationLabel(seconds).toLowerCase(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 40 * scale,
+                      fontWeight: FontWeight.w300,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.9),
+                    ),
                   ),
                 ),
               ),
               SizedBox(width: 28 * scale),
               _SheetIconButton(
                 icon: Icons.add,
-                onTap: () => onMinutesChanged(
-                  TimerPrefs.clampMinutes(initialMinutes + 1),
+                onTap: () => onSecondsChanged(
+                  TimerPrefs.clampSeconds(seconds + TimerPrefs.stepSeconds),
                 ),
               ),
             ],
@@ -245,11 +279,13 @@ class _TimerTabContent extends StatelessWidget {
               thumbColor: Theme.of(context).colorScheme.primary,
             ),
             child: Slider(
-              value: initialMinutes.toDouble(),
-              min: TimerPrefs.minMinutes.toDouble(),
-              max: TimerPrefs.maxMinutes.toDouble(),
-              divisions: TimerPrefs.maxMinutes - TimerPrefs.minMinutes,
-              onChanged: (v) => onMinutesChanged(v.round()),
+              value: seconds.toDouble(),
+              min: TimerPrefs.minSeconds.toDouble(),
+              max: TimerPrefs.maxSeconds.toDouble(),
+              divisions: (TimerPrefs.maxSeconds - TimerPrefs.minSeconds) ~/
+                  TimerPrefs.stepSeconds,
+              onChanged: (v) =>
+                  onSecondsChanged(TimerPrefs.clampSeconds(v.round())),
             ),
           ),
           SizedBox(height: 20 * scale),
@@ -275,7 +311,7 @@ class _TimerTabContent extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14 * scale),
                 ),
               ),
-              onPressed: running ? null : () => onApply(initialMinutes),
+              onPressed: running ? null : () => onApply(seconds),
               child: Text(
                 strings.apply,
                 style: TextStyle(
@@ -302,10 +338,15 @@ class _TimerTabContent extends StatelessWidget {
 class _SettingsTabContent extends StatelessWidget {
   const _SettingsTabContent({
     required this.strings,
+    required this.notificationsEnabled,
     required this.soundEnabled,
     required this.vibrationEnabled,
     required this.themeMode,
     required this.onThemeChanged,
+    required this.onNotificationsChanged,
+    required this.keepScreenOn,
+    required this.onKeepScreenOnChanged,
+    required this.onClearStatistics,
     required this.onSoundChanged,
     required this.onVibrationChanged,
     required this.onLocaleChanged,
@@ -313,14 +354,45 @@ class _SettingsTabContent extends StatelessWidget {
   });
 
   final S strings;
+  final bool notificationsEnabled;
   final bool soundEnabled;
   final bool vibrationEnabled;
   final AppThemeMode themeMode;
   final ValueChanged<AppThemeMode> onThemeChanged;
+  final ValueChanged<bool> onNotificationsChanged;
+  final bool keepScreenOn;
+  final ValueChanged<bool> onKeepScreenOnChanged;
+  final Future<void> Function() onClearStatistics;
   final ValueChanged<bool> onSoundChanged;
   final ValueChanged<bool> onVibrationChanged;
   final ValueChanged<AppLocale> onLocaleChanged;
   final double scale;
+
+  Future<void> _confirmClearStatistics(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.clearStatsConfirmTitle),
+        content: Text(strings.clearStatsConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(strings.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(strings.delete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await onClearStatistics();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(strings.statsCleared)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -359,14 +431,50 @@ class _SettingsTabContent extends StatelessWidget {
           SizedBox(height: 12 * scale),
           _SectionLabel(text: strings.notifications, scale: scale),
           _SettingsTile(
+            title: strings.notificationsEnabled,
+            value: notificationsEnabled,
+            onChanged: onNotificationsChanged,
+          ),
+          _SettingsTile(
             title: strings.sound,
             value: soundEnabled,
-            onChanged: onSoundChanged,
+            // Звук — свойство уведомления: без уведомлений настраивать нечего.
+            onChanged: notificationsEnabled ? onSoundChanged : null,
           ),
           _SettingsTile(
             title: strings.vibration,
             value: vibrationEnabled,
             onChanged: onVibrationChanged,
+          ),
+          SizedBox(height: 12 * scale),
+          _SectionLabel(text: strings.screen, scale: scale),
+          _SettingsTile(
+            title: strings.keepScreenOn,
+            value: keepScreenOn,
+            onChanged: onKeepScreenOnChanged,
+          ),
+          SizedBox(height: 12 * scale),
+          _SectionLabel(text: strings.analytics, scale: scale),
+          TextButton(
+            onPressed: () => _confirmClearStatistics(context),
+            child: Text(strings.clearStats),
+          ),
+          SizedBox(height: 12 * scale),
+          _SectionLabel(text: strings.about, scale: scale),
+          TextButton(
+            // Стандартное окно Flutter: версия, описание и страница лицензий
+            // используемых библиотек.
+            onPressed: () => showAboutDialog(
+              context: context,
+              applicationName: appName,
+              applicationVersion: appVersion,
+              applicationLegalese: '© 2026 NlITIlN · MIT License',
+              children: [
+                const SizedBox(height: 16),
+                Text(strings.aboutDescription),
+              ],
+            ),
+            child: const Text('$appName $appVersion'),
           ),
         ],
       ),
@@ -503,7 +611,9 @@ class _SettingsTile extends StatelessWidget {
 
   final String title;
   final bool value;
-  final ValueChanged<bool> onChanged;
+
+  /// null — переключатель неактивен.
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {

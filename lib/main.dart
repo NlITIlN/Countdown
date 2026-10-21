@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'l10n/strings.dart';
@@ -28,9 +29,11 @@ void main() async {
   final themePrefs = ThemePrefs(prefs);
   final initialTheme = themePrefs.loadTheme();
 
+  // Уведомления настраиваются после первого кадра, чтобы не задерживать
+  // старт (на телефоне это ещё и разбор базы часовых поясов). Разрешение
+  // спрашивается при первом запуске таймера (HomeTimerController.start).
   final notifications = NotificationService();
-  await notifications.init();
-  await notifications.requestPermission();
+  WidgetsBinding.instance.addPostFrameCallback((_) => notifications.init());
 
   runApp(
     CountdownApp(
@@ -97,6 +100,11 @@ class _CountdownAppState extends State<CountdownApp> {
       debugShowCheckedModeBanner: false,
       title: 'Countdown',
       theme: buildAppTheme(_theme),
+      // Системные тексты Flutter (кнопки диалогов, «назад», лицензии) и даты
+      // intl — на языке приложения.
+      locale: Locale(strings.languageCode),
+      supportedLocales: S.supportedLocales,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: HomeScreen(
         strings: strings,
         usageStore: widget.usageStore,

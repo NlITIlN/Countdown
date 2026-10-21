@@ -1,3 +1,5 @@
+import 'dart:ui' show Locale;
+
 enum AppLocale { ru, en }
 
 class S {
@@ -10,6 +12,11 @@ class S {
 
   bool get isRu => locale == AppLocale.ru;
 
+  /// Код языка для Flutter / intl.
+  String get languageCode => isRu ? 'ru' : 'en';
+
+  static const supportedLocales = [Locale('ru'), Locale('en')];
+
   String get settings => isRu ? 'Настройки' : 'Settings';
   String get language => isRu ? 'Язык' : 'Language';
   String get theme => isRu ? 'Тема' : 'Theme';
@@ -18,7 +25,27 @@ class S {
   String get themeLight => isRu ? 'Светлая' : 'Light';
   String get themeNeon => isRu ? 'Неоновая' : 'Neon';
   String get notifications => isRu ? 'Уведомления' : 'Notifications';
+  String get notificationsEnabled =>
+      isRu ? 'Присылать уведомления' : 'Send notifications';
   String get sound => isRu ? 'Звук' : 'Sound';
+  String get screen => isRu ? 'Экран' : 'Screen';
+  String get clearStats => isRu ? 'Очистить статистику' : 'Clear statistics';
+  String get clearStatsConfirmTitle =>
+      isRu ? 'Очистить статистику?' : 'Clear statistics?';
+  String get clearStatsConfirmBody => isRu
+      ? 'Вся история запусков, серия и значки будут удалены. Это нельзя отменить.'
+      : 'All session history, your streak and badges will be deleted. This cannot be undone.';
+  String get cancel => isRu ? 'Отмена' : 'Cancel';
+  String get about => isRu ? 'О приложении' : 'About';
+  String get aboutDescription => isRu
+      ? 'Минималистичный таймер обратного отсчёта. Все данные — время, '
+          'статистика и настройки — хранятся только на этом устройстве.'
+      : 'A minimalist countdown timer. All data — durations, statistics '
+          'and settings — stays on this device only.';
+  String get delete => isRu ? 'Удалить' : 'Delete';
+  String get statsCleared => isRu ? 'Статистика очищена' : 'Statistics cleared';
+  String get keepScreenOn =>
+      isRu ? 'Не гасить во время отсчёта' : 'Keep on during countdown';
   String get soundDescription =>
       isRu ? 'Звук при уведомлениях' : 'Notification sound';
   String get vibration => isRu ? 'Вибрация' : 'Vibration';
@@ -28,14 +55,23 @@ class S {
   String get english => 'English';
 
   String get timer => isRu ? 'Таймер' : 'Timer';
-  String get setMinutes => isRu ? 'Минуты' : 'Minutes';
+  String get setDuration => isRu ? 'Время' : 'Duration';
   String get apply => isRu ? 'Готово' : 'Done';
   String get reset => isRu ? 'Сброс' : 'Reset';
   String get done => isRu ? 'Готово' : 'Done';
   String get tapHint => isRu ? 'нажмите' : 'tap';
   String get minUnit => isRu ? 'мин' : 'min';
 
-  String minutesLabel(int minutes) => '$minutes $minUnit';
+  String get secUnit => isRu ? 'сек' : 'sec';
+
+  /// «40 сек», «3 мин», «1 мин 30 сек».
+  String durationLabel(int seconds) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    if (m == 0) return '$s $secUnit';
+    if (s == 0) return '$m $minUnit';
+    return '$m $minUnit $s $secUnit';
+  }
 
   String get analytics => isRu ? 'Статистика' : 'Analytics';
   String get notificationsHint => isRu
@@ -69,6 +105,13 @@ class S {
   String achievementStreakBody(int days) => isRu
       ? '${streakDays(days)}. Держи темп'
       : 'Streak of $days days! Keep it up';
+  String get achievementStrongWeekTitle =>
+      isRu ? '📈 Сильная неделя!' : '📈 Strong week!';
+  String get achievementMonthUpTitle =>
+      isRu ? '📊 Месяц идёт вверх!' : '📊 Your month is trending up!';
+  String get achievementMonthUpBody => isRu
+      ? 'В среднем в день вы запускаете таймер чаще, чем в прошлом месяце'
+      : 'More sessions per day than last month';
   String get achievementComebackTitle =>
       isRu ? '👋 С возвращением!' : '👋 Welcome back!';
   String get achievementComebackBody => isRu

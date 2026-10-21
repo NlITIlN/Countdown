@@ -33,6 +33,9 @@ class MobileNotificationHandler {
 
   bool _ready = false;
 
+  /// Уведомление о завершении запланировано (и ещё не забрано claimDone).
+  bool _doneScheduled = false;
+
   AndroidFlutterLocalNotificationsPlugin? get _android =>
       _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
@@ -117,7 +120,7 @@ class MobileNotificationHandler {
     await cancelSteps();
 
     try {
-      await _scheduleNative(
+      _doneScheduled = await _scheduleNative(
         id: idDone,
         at: endsAt,
         title: S.forRu(isRu).timerDoneTitle,
@@ -132,6 +135,7 @@ class MobileNotificationHandler {
 
   Future<void> cancelSteps() async {
     if (!_ready) return;
+    _doneScheduled = false;
     try {
       // idHalf/idTenSec — уведомления старых версий, могут ещё висеть в расписании.
       for (final id in [idDone, idHalf, idTenSec]) {
@@ -139,6 +143,26 @@ class MobileNotificationHandler {
       }
     } catch (e) {
       debugPrint('cancelSteps failed: $e');
+    }
+  }
+
+  /// Забирает уведомление о завершении: true — показать сейчас (запланированное
+  /// ещё в очереди и отменено — например, неточный будильник опаздывает — или
+  /// его не было); false — система его уже показала.
+  Future<bool> claimDone() async {
+    if (!_ready) return false;
+    if (!_doneScheduled) return true;
+    _doneScheduled = false;
+    try {
+      final pending = await _plugin.pendingNotificationRequests();
+      if (pending.any((r) => r.id == idDone)) {
+        await _plugin.cancel(idDone);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('claimDone failed: $e');
+      return true;
     }
   }
 
@@ -162,7 +186,8 @@ class MobileNotificationHandler {
     }
   }
 
-  Future<void> _scheduleNative({
+  /// true — уведомление поставлено в расписание.
+  Future<bool> _scheduleNative({
     required int id,
     required DateTime at,
     required String title,
@@ -170,7 +195,7 @@ class MobileNotificationHandler {
     bool playSound = true,
     bool vibrate = true,
   }) async {
-    if (at.isBefore(DateTime.now())) return;
+    if (at.isBefore(DateTime.now())) return false;
 
     // Точное время, если система разрешает; иначе — inexact (может опоздать).
     final exact = Platform.isAndroid &&
@@ -188,6 +213,7 @@ class MobileNotificationHandler {
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
+    return true;
   }
 
   NotificationDetails _notificationDetails({

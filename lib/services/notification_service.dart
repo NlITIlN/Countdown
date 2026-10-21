@@ -10,11 +10,14 @@ class NotificationService {
   final MobileNotificationHandler _mobile = MobileNotificationHandler();
   final DesktopNotificationHandler _desktop = DesktopNotificationHandler();
 
-  bool _ready = false;
+  Future<void>? _initFuture;
 
-  Future<void> init() async {
-    if (_ready) return;
+  /// Идемпотентна: запускается один раз, остальные вызовы ждут тот же Future.
+  /// Каждый метод сервиса сам дожидается init — порядок вызовов не важен,
+  /// поэтому main() может отложить init до первого кадра.
+  Future<void> init() => _initFuture ??= _init();
 
+  Future<void> _init() async {
     if (MobileNotificationHandler.isMobile) {
       await _mobile.init();
     }
@@ -22,11 +25,10 @@ class NotificationService {
     if (DesktopNotificationHandler.isDesktop) {
       await _desktop.init();
     }
-
-    _ready = true;
   }
 
   Future<void> requestPermission() async {
+    await init();
     if (MobileNotificationHandler.isMobile) {
       await _mobile.requestPermission();
     }
@@ -39,6 +41,7 @@ class NotificationService {
     bool playSound = true,
     bool vibrate = true,
   }) async {
+    await init();
     if (MobileNotificationHandler.isMobile) {
       await _mobile.scheduleSteps(
         endsAt: endsAt,
@@ -61,20 +64,26 @@ class NotificationService {
   }
 
   Future<void> cancelSteps() async {
+    await init();
     await _mobile.cancelSteps();
     await _desktop.cancelSteps();
   }
 
-  Future<void> showDone({
+  /// Уведомление о завершении — ровно одно. Если запланированное уже показано
+  /// системой, ничего не делает; если ещё нет (или его не было) — показывает
+  /// сейчас, отменив запланированное.
+  Future<void> deliverDone({
     required bool isRu,
     bool playSound = true,
     bool vibrate = true,
   }) async {
+    await init();
     final s = S.forRu(isRu);
     final title = s.timerDoneTitle;
     final body = s.timerDoneBody;
 
     if (MobileNotificationHandler.isMobile) {
+      if (!await _mobile.claimDone()) return;
       await _mobile.show(
         title,
         body,
@@ -83,6 +92,7 @@ class NotificationService {
         vibrate: vibrate,
       );
     } else {
+      if (!await _desktop.claimDone()) return;
       await _desktop.show(
         title,
         body,
@@ -99,6 +109,7 @@ class NotificationService {
     bool playSound = true,
     bool vibrate = true,
   }) async {
+    await init();
     final s = S.forRu(isRu);
     final title = s.badgeNotificationTitle;
     final body = s.badgeNotificationBody(count);
@@ -129,6 +140,7 @@ class NotificationService {
     bool playSound = true,
     bool vibrate = true,
   }) async {
+    await init();
     // Генерируем уникальный ID для каждого достижения
     final id = idAchievementStart + DateTime.now().millisecond % 100;
 

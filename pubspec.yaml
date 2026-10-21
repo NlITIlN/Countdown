@@ -1,7 +1,7 @@
 name: countdown
 description: Minimal countdown timer for Android and iOS.
 publish_to: 'none'
-version: 1.0.0+1
+version: 0.2.0+1
 
 environment:
   sdk: ^3.5.0
@@ -9,6 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
   flutter_local_notifications: ^18.0.1
   flutter_timezone: ^4.1.0
   local_notifier: ^0.1.6
@@ -17,6 +20,10 @@ dependencies:
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_driver:
     sdk: flutter
   flutter_lints: ^5.0.0
 

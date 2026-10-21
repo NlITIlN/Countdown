@@ -1,16 +1,21 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../screens/home_timer_controller.dart';
 import 'layout.dart';
 
 class RingsTimerButton extends StatefulWidget {
   final String timeText;
-  final double progress; // 0.0 to 1.0
+
+  /// Время окончания отсчёта; null — таймер не идёт.
+  final DateTime? endsAt;
+  final Duration totalDuration;
   final TimerState state;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
 
   /// Что произойдёт по нажатию — для экранных дикторов.
   final String? semanticsHint;
@@ -18,10 +23,10 @@ class RingsTimerButton extends StatefulWidget {
   const RingsTimerButton({
     super.key,
     required this.timeText,
-    required this.progress,
+    required this.endsAt,
+    required this.totalDuration,
     required this.state,
     required this.onTap,
-    required this.onLongPress,
     this.semanticsHint,
   });
 
@@ -35,7 +40,9 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   late AnimationController _pulseController;
   late AnimationController _fadeController;
   late AnimationController _resurfaceController;
-  late AnimationController _progressController;
+
+  /// «Выезд» дуги при старте и «уезд» при сбросе.
+  late AnimationController _revealController;
 
   // Press animation (UI-only, independent of timer state)
   late Animation<double> _pressScale;
@@ -49,8 +56,12 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   late Animation<double> _resurfaceOpacity;
   late Animation<double> _resurfaceScale;
 
-  // Smooth progress animation
-  late Animation<double> _progressAnimation;
+  // Continuous progress: repaints the canvas only, no widget rebuilds.
+  final ValueNotifier<double> _progress = ValueNotifier(0);
+  double _rawProgress = 0;
+  late final Ticker _frameTicker;
+  Timer? _slowTimer;
+  double _diameter = AppMetrics.minCircle;
 
   @override
   void initState() {
@@ -98,12 +109,15 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
       CurvedAnimation(parent: _resurfaceController, curve: Curves.easeOutBack),
     );
 
-    // Animate progress changes smoothly between ticks
-    _progressController = AnimationController(
+    _revealController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
-    );
-    _progressAnimation = AlwaysStoppedAnimation(widget.progress);
+      // Таймер, восстановленный после перезапуска, показываем сразу.
+      value: widget.endsAt != null ? 1 : 0,
+    )..addListener(_publishProgress);
+
+    _frameTicker = createTicker((_) => _updateProgress());
+    _syncProgressDriver();
 
     _handleStateChange(widget.state);
   }
@@ -111,22 +125,61 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   @override
   void didUpdateWidget(RingsTimerButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.progress != widget.progress) {
-      _animateProgress(oldWidget.progress, widget.progress);
+    if (oldWidget.endsAt != widget.endsAt ||
+        oldWidget.totalDuration != widget.totalDuration) {
+      if (oldWidget.endsAt == null && widget.endsAt != null) {
+        _revealController.forward(from: 0);
+      } else if (oldWidget.endsAt != null && widget.endsAt == null) {
+        if (widget.state == TimerState.completed) {
+          _rawProgress = 0;
+        } else {
+          _revealController.reverse();
+        }
+      }
+      _syncProgressDriver();
     }
     if (oldWidget.state != widget.state) {
       _handleStateChange(widget.state);
     }
   }
 
-  void _animateProgress(double from, double to) {
-    _progressController.stop();
-    _progressAnimation = Tween<double>(begin: from, end: to).animate(
-      CurvedAnimation(parent: _progressController, curve: Curves.easeOutCubic),
-    );
-    _progressController
-      ..value = 0
-      ..forward();
+  /// Подбирает частоту обновления дуги: короткий таймер (дуга бежит быстро) —
+  /// каждый кадр; длинный — примерно на каждые полпикселя движения.
+  /// Так 5-минутный отсчёт не гоняет 60–120 кадров/с ради сдвига в 0,05 px.
+  void _syncProgressDriver() {
+    _frameTicker.stop();
+    _slowTimer?.cancel();
+    _slowTimer = null;
+    if (widget.endsAt == null) {
+      _publishProgress();
+      return;
+    }
+    _updateProgress();
+
+    final totalMs = widget.totalDuration.inMilliseconds;
+    final circumference = math.pi * _diameter;
+    final msPerHalfPixel = totalMs / (circumference * 2);
+    if (msPerHalfPixel <= 33) {
+      _frameTicker.start();
+    } else {
+      final interval =
+          Duration(milliseconds: msPerHalfPixel.clamp(33, 250).round());
+      _slowTimer = Timer.periodic(interval, (_) => _updateProgress());
+    }
+  }
+
+  void _updateProgress() {
+    final endsAt = widget.endsAt;
+    final totalMs = widget.totalDuration.inMilliseconds;
+    if (endsAt == null || totalMs <= 0) return;
+    final leftMs = endsAt.difference(DateTime.now()).inMilliseconds;
+    _rawProgress = (leftMs / totalMs).clamp(0.0, 1.0);
+    _publishProgress();
+  }
+
+  void _publishProgress() {
+    final reveal = Curves.easeOutCubic.transform(_revealController.value);
+    _progress.value = _rawProgress * reveal;
   }
 
   void _playPress() {
@@ -178,7 +231,10 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
     _pulseController.dispose();
     _fadeController.dispose();
     _resurfaceController.dispose();
-    _progressController.dispose();
+    _revealController.dispose();
+    _frameTicker.dispose();
+    _slowTimer?.cancel();
+    _progress.dispose();
     super.dispose();
   }
 
@@ -186,6 +242,15 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   Widget build(BuildContext context) {
     final metrics = AppMetrics.of(context);
     final size = metrics.timerButtonSize; // ~150-200px
+    if (size != _diameter) {
+      _diameter = size;
+      // Частота обновления зависит от длины окружности.
+      if (widget.endsAt != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _syncProgressDriver();
+        });
+      }
+    }
 
     return Semantics(
       button: true,
@@ -196,7 +261,6 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
       child: GestureDetector(
         onTapDown: (_) => _playPress(),
         onTap: widget.onTap,
-        onLongPress: widget.onLongPress,
         child: SizedBox(
           width: size,
           height: size,
@@ -211,7 +275,6 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
                     _pulseController,
                     _fadeController,
                     _resurfaceController,
-                    _progressController,
                   ]),
                   builder: (context, _) {
                     double scale = 1.0;
@@ -231,10 +294,6 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
                       }
                     }
 
-                    final progress = _progressController.isAnimating
-                        ? _progressAnimation.value
-                        : widget.progress;
-
                     if (widget.state == TimerState.completed &&
                         _resurfaceController.isAnimating) {
                       scale *= _resurfaceScale.value;
@@ -244,14 +303,33 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
                       scale: scale,
                       child: Opacity(
                         opacity: opacity,
-                        child: CustomPaint(
-                          size: Size(size, size),
-                          painter: _RingsPainter(
-                            progress: progress,
-                            state: widget.state,
-                            fadeProgress: _fadeController.value,
-                            resurfaceProgress: _resurfaceController.value,
-                          ),
+                        child: Stack(
+                          children: [
+                            // Статичные кольца: кэшируются, не трогаются
+                            // при движении дуги.
+                            RepaintBoundary(
+                              child: CustomPaint(
+                                size: Size(size, size),
+                                painter: _RingsPainter(
+                                  state: widget.state,
+                                  fadeProgress: _fadeController.value,
+                                  resurfaceProgress: _resurfaceController.value,
+                                ),
+                              ),
+                            ),
+                            // Дуга прогресса: перерисовывается по _progress.
+                            RepaintBoundary(
+                              child: CustomPaint(
+                                size: Size(size, size),
+                                painter: _ProgressPainter(
+                                  progress: _progress,
+                                  state: widget.state,
+                                  fadeProgress: _fadeController.value,
+                                  resurfaceProgress: _resurfaceController.value,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -276,55 +354,86 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   }
 }
 
-class _RingsPainter extends CustomPainter {
-  final double progress; // 0.0 to 1.0
+/// Общая геометрия и цвета обоих слоёв.
+abstract class _RingLayerPainter extends CustomPainter {
+  _RingLayerPainter({
+    required this.state,
+    required this.fadeProgress,
+    required this.resurfaceProgress,
+    super.repaint,
+  });
+
   final TimerState state;
   final double fadeProgress; // 0.0 to 1.0
   final double resurfaceProgress; // 0.0 to 1.0
 
+  static const rings = [
+    (
+      radiusFactor: 0.95,
+      strokeWidth: 3.0,
+      glowWidth: 12.0,
+      glowBlur: 12.0,
+      glowAlpha: 0.28
+    ),
+    (
+      radiusFactor: 0.72,
+      strokeWidth: 2.2,
+      glowWidth: 9.0,
+      glowBlur: 10.0,
+      glowAlpha: 0.22
+    ),
+    (
+      radiusFactor: 0.48,
+      strokeWidth: 1.4,
+      glowWidth: 7.0,
+      glowBlur: 8.0,
+      glowAlpha: 0.18
+    ),
+  ];
+
+  static double baseRadius(Size size) => size.width / 2 - 10;
+
+  double get baseOpacity {
+    switch (state) {
+      case TimerState.completed:
+        return fadeProgress < 1.0 ? 1.0 - fadeProgress : resurfaceProgress;
+      case TimerState.idle:
+        return 0.32;
+      case TimerState.running:
+        return 0.9;
+      case TimerState.critical:
+        return 1.0;
+    }
+  }
+
+  bool shouldRepaintLayer(_RingLayerPainter old) =>
+      old.state != state ||
+      old.fadeProgress != fadeProgress ||
+      old.resurfaceProgress != resurfaceProgress;
+}
+
+/// Три кольца и их свечение. Не зависит от прогресса — благодаря
+/// RepaintBoundary рисуется заново только при смене состояния / анимации завершения.
+class _RingsPainter extends _RingLayerPainter {
   _RingsPainter({
-    required this.progress,
-    required this.state,
-    required this.fadeProgress,
-    required this.resurfaceProgress,
+    required super.state,
+    required super.fadeProgress,
+    required super.resurfaceProgress,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final baseRadius = size.width / 2 - 10;
-    final opacity = _getBaseOpacity();
+    final radiusBase = _RingLayerPainter.baseRadius(size);
+    final opacity = baseOpacity;
+    // Размытие свечения считается только там, где оно видно.
+    final glow = state == TimerState.critical || state == TimerState.completed;
 
-    const rings = [
-      (
-        radiusFactor: 0.95,
-        strokeWidth: 3.0,
-        glowWidth: 12.0,
-        glowBlur: 12.0,
-        glowAlpha: 0.28
-      ),
-      (
-        radiusFactor: 0.72,
-        strokeWidth: 2.2,
-        glowWidth: 9.0,
-        glowBlur: 10.0,
-        glowAlpha: 0.22
-      ),
-      (
-        radiusFactor: 0.48,
-        strokeWidth: 1.4,
-        glowWidth: 7.0,
-        glowBlur: 8.0,
-        glowAlpha: 0.18
-      ),
-    ];
+    for (var i = 0; i < _RingLayerPainter.rings.length; i++) {
+      final ring = _RingLayerPainter.rings[i];
+      final radius = radiusBase * ring.radiusFactor;
 
-    for (var i = 0; i < rings.length; i++) {
-      final ring = rings[i];
-      final radius = baseRadius * ring.radiusFactor;
-
-      // Draw glow for critical/completed state with per-ring intensity
-      if (state == TimerState.critical || state == TimerState.completed) {
+      if (glow) {
         final glowColor = Color.lerp(
           const Color(0xFF27AE60),
           const Color(0xFF6EE7A0),
@@ -356,75 +465,39 @@ class _RingsPainter extends CustomPainter {
 
       canvas.drawCircle(center, radius, paint);
     }
-
-    final progressVisibility = state == TimerState.completed
-        ? (1.0 - fadeProgress).clamp(0.0, 1.0)
-        : 1.0;
-
-    if (progress > 0 && progressVisibility > 0.0) {
-      final outerRadius = baseRadius * rings.first.radiusFactor;
-      final progressColor = _getProgressColor().withValues(
-        alpha: (0.95 * opacity * progressVisibility).clamp(0.0, 1.0),
-      );
-      final progressPaint = Paint()
-        ..color = progressColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 4.8
-        ..strokeCap = StrokeCap.round
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
-
-      final rect = Rect.fromCircle(center: center, radius: outerRadius);
-      final startAngle = -math.pi / 2;
-      final sweepAngle = 2 * math.pi * progress;
-      canvas.drawArc(rect, startAngle, sweepAngle, false, progressPaint);
-
-      final crispPaint = Paint()
-        ..color = progressColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.6
-        ..strokeCap = StrokeCap.round;
-      canvas.drawArc(rect, startAngle, sweepAngle, false, crispPaint);
-
-      final angle = startAngle + sweepAngle;
-      final indicator = Offset(
-        center.dx + math.cos(angle) * outerRadius,
-        center.dy + math.sin(angle) * outerRadius,
-      );
-      canvas.drawCircle(
-        indicator,
-        5.8,
-        Paint()
-          ..color = progressColor.withValues(
-              alpha: (0.6 * progressVisibility).clamp(0.0, 1.0)),
-      );
-      canvas.drawCircle(
-        indicator,
-        3.2,
-        Paint()..color = progressColor,
-      );
-    }
   }
 
-  double _getBaseOpacity() {
-    if (state == TimerState.completed) {
-      if (fadeProgress < 1.0) {
-        return 1.0 - fadeProgress;
-      }
-      return resurfaceProgress;
-    }
-    if (state == TimerState.idle) {
-      return 0.32;
-    }
-    if (state == TimerState.running) {
-      return 0.9;
-    }
-    if (state == TimerState.critical) {
-      return 1.0;
-    }
-    return 1.0;
-  }
+  @override
+  bool shouldRepaint(_RingsPainter oldDelegate) =>
+      shouldRepaintLayer(oldDelegate);
+}
 
-  Color _getProgressColor() {
+/// Дуга прогресса и точка-индикатор. Перерисовывается при изменении
+/// [progress] без перестройки виджетов; кисти создаются один раз на экземпляр.
+class _ProgressPainter extends _RingLayerPainter {
+  _ProgressPainter({
+    required this.progress,
+    required super.state,
+    required super.fadeProgress,
+    required super.resurfaceProgress,
+  }) : super(repaint: progress);
+
+  /// 0.0–1.0
+  final ValueListenable<double> progress;
+
+  final Paint _glowPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 4.8
+    ..strokeCap = StrokeCap.round
+    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+  final Paint _crispPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.6
+    ..strokeCap = StrokeCap.round;
+  final Paint _dotHaloPaint = Paint();
+  final Paint _dotPaint = Paint();
+
+  Color get _progressColor {
     switch (state) {
       case TimerState.critical:
         return const Color(0xFFFFB86C);
@@ -436,10 +509,43 @@ class _RingsPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RingsPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.state != state ||
-        oldDelegate.fadeProgress != fadeProgress ||
-        oldDelegate.resurfaceProgress != resurfaceProgress;
+  void paint(Canvas canvas, Size size) {
+    final value = progress.value;
+    final visibility = state == TimerState.completed
+        ? (1.0 - fadeProgress).clamp(0.0, 1.0)
+        : 1.0;
+    if (value <= 0 || visibility <= 0.0) return;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final outerRadius = _RingLayerPainter.baseRadius(size) *
+        _RingLayerPainter.rings.first.radiusFactor;
+    final color = _progressColor.withValues(
+      alpha: (0.95 * baseOpacity * visibility).clamp(0.0, 1.0),
+    );
+
+    final rect = Rect.fromCircle(center: center, radius: outerRadius);
+    const startAngle = -math.pi / 2;
+    final sweepAngle = 2 * math.pi * value;
+    canvas.drawArc(
+        rect, startAngle, sweepAngle, false, _glowPaint..color = color);
+    canvas.drawArc(
+        rect, startAngle, sweepAngle, false, _crispPaint..color = color);
+
+    final angle = startAngle + sweepAngle;
+    final indicator = Offset(
+      center.dx + math.cos(angle) * outerRadius,
+      center.dy + math.sin(angle) * outerRadius,
+    );
+    canvas.drawCircle(
+      indicator,
+      5.8,
+      _dotHaloPaint
+        ..color = color.withValues(alpha: (0.6 * visibility).clamp(0.0, 1.0)),
+    );
+    canvas.drawCircle(indicator, 3.2, _dotPaint..color = color);
   }
+
+  @override
+  bool shouldRepaint(_ProgressPainter oldDelegate) =>
+      oldDelegate.progress != progress || shouldRepaintLayer(oldDelegate);
 }
