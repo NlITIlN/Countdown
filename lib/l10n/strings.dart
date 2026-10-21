@@ -29,6 +29,12 @@ class S {
       ? 'Вся история запусков, серия и значки будут удалены. Это нельзя отменить.'
       : 'All session history, your streak and badges will be deleted. This cannot be undone.';
   String get cancel => isRu ? 'Отмена' : 'Cancel';
+  String get about => isRu ? 'О приложении' : 'About';
+  String get aboutDescription => isRu
+      ? 'Минималистичный таймер обратного отсчёта. Все данные — время, '
+          'статистика и настройки — хранятся только на этом устройстве.'
+      : 'A minimalist countdown timer. All data — durations, statistics '
+          'and settings — stays on this device only.';
   String get delete => isRu ? 'Удалить' : 'Delete';
   String get statsCleared => isRu ? 'Статистика очищена' : 'Statistics cleared';
   String get keepScreenOn =>

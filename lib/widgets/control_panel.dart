@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_info.dart';
 import '../l10n/strings.dart';
 import '../services/notification_prefs.dart';
 import '../services/timer_prefs.dart';
@@ -457,6 +458,23 @@ class _SettingsTabContent extends StatelessWidget {
           TextButton(
             onPressed: () => _confirmClearStatistics(context),
             child: Text(strings.clearStats),
+          ),
+          SizedBox(height: 12 * scale),
+          _SectionLabel(text: strings.about, scale: scale),
+          TextButton(
+            // Стандартное окно Flutter: версия, описание и страница лицензий
+            // используемых библиотек.
+            onPressed: () => showAboutDialog(
+              context: context,
+              applicationName: appName,
+              applicationVersion: appVersion,
+              applicationLegalese: '© 2026 NlITIlN · MIT License',
+              children: [
+                const SizedBox(height: 16),
+                Text(strings.aboutDescription),
+              ],
+            ),
+            child: const Text('$appName $appVersion'),
           ),
         ],
       ),

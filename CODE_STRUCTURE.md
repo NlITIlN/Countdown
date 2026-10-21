@@ -15,6 +15,7 @@ Folder layout and responsibilities of the main Dart files.
 
 - `main.dart` — entry point. Loads `SharedPreferences`, initializes notifications, restores locale and theme, builds `CountdownApp`.
 - `theme_manager.dart` — `AppThemeMode` (dark / light / neon) → `ThemeData`.
+- `app_info.dart` — app name and version for the About dialog (must match `pubspec.yaml`, checked by a test).
 
 ### Localization (`l10n/`)
 - `strings.dart` — `S`: all RU / EN user-facing strings, including notification and achievement texts. `S.forRu(isRu)` for services that only know the language flag.
@@ -59,6 +60,9 @@ Folder layout and responsibilities of the main Dart files.
 ## `test/`
 
 - `widget_test.dart` — smoke test: `HomeScreen` boots and shows the timer.
+- `app_flow_test.dart` — key flows through the real UI: start / reset, duration change, language and theme, clear statistics.
+- `app_info_test.dart` — `appVersion` matches `pubspec.yaml`.
+- `done_notification_test.dart` — exactly one completion notification (desktop handler).
 - `home_timer_controller_achievement_test.dart` — achievement rules and dedupe, badge priority, double-completion guard, completed → idle transition.
 - `usage_store_test.dart` — all-time counter beyond the 500-event limit, corrupted data, timer restore state.
 - `usage_stats_test.dart` — grouping by day, streak.
