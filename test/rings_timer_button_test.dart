@@ -14,7 +14,6 @@ Widget _button({DateTime? endsAt, required Duration total, TimerState? state}) {
           state:
               state ?? (endsAt == null ? TimerState.idle : TimerState.running),
           onTap: () {},
-          onLongPress: () {},
         ),
       ),
     ),

@@ -139,9 +139,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               ? s.resetTimerHint
                               : s.startTimerHint,
                           onTap: _onCircleTap,
-                          onLongPress: () {
-                            // Long press placeholder for future gestures
-                          },
                         ),
                       ),
                     ),

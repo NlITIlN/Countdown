@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'l10n/strings.dart';
@@ -99,6 +100,11 @@ class _CountdownAppState extends State<CountdownApp> {
       debugShowCheckedModeBanner: false,
       title: 'Countdown',
       theme: buildAppTheme(_theme),
+      // Системные тексты Flutter (кнопки диалогов, «назад», лицензии) и даты
+      // intl — на языке приложения.
+      locale: Locale(strings.languageCode),
+      supportedLocales: S.supportedLocales,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: HomeScreen(
         strings: strings,
         usageStore: widget.usageStore,

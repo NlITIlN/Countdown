@@ -20,7 +20,8 @@ Folder layout and responsibilities of the main Dart files.
 ### Localization (`l10n/`)
 - `strings.dart` — `S`: all RU / EN user-facing strings, including notification and achievement texts. `S.forRu(isRu)` for services that only know the language flag.
 - `strings_plurals.dart` — strings that need Russian plural forms (`sessionsLabel`, `timesOnDay`, `achievementRecordBody`, `dayActivity`).
-- `strings_formatters.dart` — date formatting and badge titles.
+- `strings_formatters.dart` — localized dates via `intl` (`21 окт.` / `Oct 21`, year only for past years) and badge titles.
+- `MaterialApp` uses `flutter_localizations`, so Flutter's own texts (dialog buttons, back tooltip, licenses page) follow the app language.
 
 ### Models (`models/`)
 - `day_usage.dart` — usage for one day: `{ date, count }`.

@@ -122,7 +122,7 @@ void main() {
     expect(find.text('4 мин 50 сек'), findsOneWidget);
 
     await _tapVisible(tester, find.text(const S(AppLocale.ru).apply));
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
     expect(find.text('04:50'), findsOneWidget);

@@ -16,7 +16,6 @@ class RingsTimerButton extends StatefulWidget {
   final Duration totalDuration;
   final TimerState state;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
 
   /// Что произойдёт по нажатию — для экранных дикторов.
   final String? semanticsHint;
@@ -28,7 +27,6 @@ class RingsTimerButton extends StatefulWidget {
     required this.totalDuration,
     required this.state,
     required this.onTap,
-    required this.onLongPress,
     this.semanticsHint,
   });
 
@@ -263,7 +261,6 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
       child: GestureDetector(
         onTapDown: (_) => _playPress(),
         onTap: widget.onTap,
-        onLongPress: widget.onLongPress,
         child: SizedBox(
           width: size,
           height: size,

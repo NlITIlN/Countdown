@@ -1,3 +1,5 @@
+import 'dart:ui' show Locale;
+
 enum AppLocale { ru, en }
 
 class S {
@@ -9,6 +11,11 @@ class S {
   final AppLocale locale;
 
   bool get isRu => locale == AppLocale.ru;
+
+  /// Код языка для Flutter / intl.
+  String get languageCode => isRu ? 'ru' : 'en';
+
+  static const supportedLocales = [Locale('ru'), Locale('en')];
 
   String get settings => isRu ? 'Настройки' : 'Settings';
   String get language => isRu ? 'Язык' : 'Language';

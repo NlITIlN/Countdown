@@ -1,7 +1,9 @@
 import 'package:countdown/l10n/strings.dart';
+import 'package:countdown/l10n/strings_formatters.dart';
 import 'package:countdown/services/notification_prefs.dart';
 import 'package:countdown/services/timer_prefs.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -56,5 +58,20 @@ void main() {
     expect(ru.durationLabel(180), '3 мин');
     expect(ru.durationLabel(90), '1 мин 30 сек');
     expect(en.durationLabel(90), '1 min 30 sec');
+  });
+
+  test('dates are localized; the year is shown only for past years', () async {
+    await initializeDateFormatting('ru');
+    await initializeDateFormatting('en');
+    const ru = S(AppLocale.ru);
+    const en = S(AppLocale.en);
+    final now = DateTime(2026, 10, 21);
+
+    expect(ru.formatDay(DateTime(2026, 10, 21), now: now), '21 окт.');
+    expect(en.formatDay(DateTime(2026, 10, 21), now: now), 'Oct 21');
+    // intl ставит узкий неразрывный пробел (U+202F) перед «г.» — так «г.» не отрывается от года.
+    expect(ru.formatDay(DateTime(2025, 3, 5), now: now).replaceAll(' ', ' '),
+        '5 мар. 2025 г.');
+    expect(en.formatDay(DateTime(2025, 3, 5), now: now), 'Mar 5, 2025');
   });
 }

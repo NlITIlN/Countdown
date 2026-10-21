@@ -57,7 +57,7 @@ void main() {
         await _wait(tester, 1);
         await tester.tap(find.byIcon(Icons.bar_chart));
         await _wait(tester, 2);
-        await tester.pageBack();
+        await tester.tap(find.byType(BackButton));
         await _wait(tester, 1);
 
         // 4. Меню → настройки → вкладки → назад.
@@ -69,7 +69,7 @@ void main() {
         await _wait(tester, 1);
         await tester.tap(find.byType(Tab).first);
         await _wait(tester, 1);
-        await tester.pageBack();
+        await tester.tap(find.byType(BackButton));
         await _wait(tester, 1);
 
         // 5. Сброс таймера.
