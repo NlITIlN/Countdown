@@ -18,6 +18,8 @@ class ControlPanel extends StatefulWidget {
     required this.themeMode,
     required this.onThemeChanged,
     required this.onNotificationsChanged,
+    required this.keepScreenOn,
+    required this.onKeepScreenOnChanged,
     this.onReset,
   });
 
@@ -32,6 +34,8 @@ class ControlPanel extends StatefulWidget {
   final AppThemeMode themeMode;
   final ValueChanged<AppThemeMode> onThemeChanged;
   final ValueChanged<bool> onNotificationsChanged;
+  final bool keepScreenOn;
+  final ValueChanged<bool> onKeepScreenOnChanged;
   final VoidCallback? onReset;
 
   @override
@@ -43,6 +47,7 @@ class _ControlPanelState extends State<ControlPanel>
   late TabController _tabController;
   late int _seconds;
   late bool _notificationsEnabled;
+  late bool _keepScreenOn;
   late bool _soundEnabled;
   late bool _vibrationEnabled;
 
@@ -52,6 +57,7 @@ class _ControlPanelState extends State<ControlPanel>
     _tabController = TabController(length: 2, vsync: this);
     _seconds = widget.initialSeconds;
     _notificationsEnabled = widget.notificationPrefs.notificationsEnabled();
+    _keepScreenOn = widget.keepScreenOn;
     _soundEnabled = widget.notificationPrefs.soundEnabled();
     _vibrationEnabled = widget.notificationPrefs.vibrationEnabled();
   }
@@ -60,6 +66,11 @@ class _ControlPanelState extends State<ControlPanel>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _setKeepScreenOn(bool on) {
+    setState(() => _keepScreenOn = on);
+    widget.onKeepScreenOnChanged(on);
   }
 
   void _setNotificationsEnabled(bool enabled) {
@@ -143,6 +154,8 @@ class _ControlPanelState extends State<ControlPanel>
                   themeMode: widget.themeMode,
                   onThemeChanged: widget.onThemeChanged,
                   onNotificationsChanged: _setNotificationsEnabled,
+                  keepScreenOn: _keepScreenOn,
+                  onKeepScreenOnChanged: _setKeepScreenOn,
                   onSoundChanged: _setSoundEnabled,
                   onVibrationChanged: _setVibrationEnabled,
                   onLocaleChanged: widget.onLocaleChanged,
@@ -327,6 +340,8 @@ class _SettingsTabContent extends StatelessWidget {
     required this.themeMode,
     required this.onThemeChanged,
     required this.onNotificationsChanged,
+    required this.keepScreenOn,
+    required this.onKeepScreenOnChanged,
     required this.onSoundChanged,
     required this.onVibrationChanged,
     required this.onLocaleChanged,
@@ -340,6 +355,8 @@ class _SettingsTabContent extends StatelessWidget {
   final AppThemeMode themeMode;
   final ValueChanged<AppThemeMode> onThemeChanged;
   final ValueChanged<bool> onNotificationsChanged;
+  final bool keepScreenOn;
+  final ValueChanged<bool> onKeepScreenOnChanged;
   final ValueChanged<bool> onSoundChanged;
   final ValueChanged<bool> onVibrationChanged;
   final ValueChanged<AppLocale> onLocaleChanged;
@@ -396,6 +413,13 @@ class _SettingsTabContent extends StatelessWidget {
             title: strings.vibration,
             value: vibrationEnabled,
             onChanged: onVibrationChanged,
+          ),
+          SizedBox(height: 12 * scale),
+          _SectionLabel(text: strings.screen, scale: scale),
+          _SettingsTile(
+            title: strings.keepScreenOn,
+            value: keepScreenOn,
+            onChanged: onKeepScreenOnChanged,
           ),
         ],
       ),

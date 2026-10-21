@@ -1,6 +1,9 @@
 #include "flutter_window.h"
 
+#include <flutter/standard_method_codec.h>
+
 #include <optional>
+#include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -25,6 +28,7 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  RegisterScreenChannel();
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -39,7 +43,40 @@ bool FlutterWindow::OnCreate() {
   return true;
 }
 
+void FlutterWindow::RegisterScreenChannel() {
+  screen_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "countdown/screen",
+          &flutter::StandardMethodCodec::GetInstance());
+  screen_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+             result) {
+        if (call.method_name() != "setKeepOn") {
+          result->NotImplemented();
+          return;
+        }
+        bool on = false;
+        if (const auto* args =
+                std::get_if<flutter::EncodableMap>(call.arguments())) {
+          const auto it = args->find(flutter::EncodableValue("on"));
+          if (it != args->end()) {
+            if (const auto* value = std::get_if<bool>(&it->second)) {
+              on = *value;
+            }
+          }
+        }
+        // Экран не гаснет и система не засыпает, пока идёт отсчёт.
+        SetThreadExecutionState(on ? (ES_CONTINUOUS | ES_DISPLAY_REQUIRED |
+                                      ES_SYSTEM_REQUIRED)
+                                   : ES_CONTINUOUS);
+        result->Success();
+      });
+}
+
 void FlutterWindow::OnDestroy() {
+  screen_channel_ = nullptr;
+  SetThreadExecutionState(ES_CONTINUOUS);
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

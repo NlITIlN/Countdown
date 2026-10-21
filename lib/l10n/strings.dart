@@ -21,6 +21,9 @@ class S {
   String get notificationsEnabled =>
       isRu ? 'Присылать уведомления' : 'Send notifications';
   String get sound => isRu ? 'Звук' : 'Sound';
+  String get screen => isRu ? 'Экран' : 'Screen';
+  String get keepScreenOn =>
+      isRu ? 'Не гасить во время отсчёта' : 'Keep on during countdown';
   String get soundDescription =>
       isRu ? 'Звук при уведомлениях' : 'Notification sound';
   String get vibration => isRu ? 'Вибрация' : 'Vibration';
@@ -80,6 +83,13 @@ class S {
   String achievementStreakBody(int days) => isRu
       ? '${streakDays(days)}. Держи темп'
       : 'Streak of $days days! Keep it up';
+  String get achievementStrongWeekTitle =>
+      isRu ? '📈 Сильная неделя!' : '📈 Strong week!';
+  String get achievementMonthUpTitle =>
+      isRu ? '📊 Месяц идёт вверх!' : '📊 Your month is trending up!';
+  String get achievementMonthUpBody => isRu
+      ? 'В среднем в день вы запускаете таймер чаще, чем в прошлом месяце'
+      : 'More sessions per day than last month';
   String get achievementComebackTitle =>
       isRu ? '👋 С возвращением!' : '👋 Welcome back!';
   String get achievementComebackBody => isRu

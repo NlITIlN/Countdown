@@ -16,6 +16,10 @@ extension PluralExtensions on S {
       ? '$today ${sessionsLabel(today)} за день (было $previousBest)'
       : '$today ${sessionsLabel(today)} in a day (was $previousBest)';
 
+  String achievementStrongWeekBody(int count) => isRu
+      ? '$count ${sessionsLabel(count)} за неделю — больше обычного'
+      : '$count ${sessionsLabel(count)} this week — more than usual';
+
   String dayActivity(String day, int count) =>
       '$day: $count ${sessionsLabel(count)}';
 

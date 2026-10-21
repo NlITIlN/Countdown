@@ -39,20 +39,15 @@ class NotificationPrefs {
     await _prefs.setBool(_permissionAskedKey, true);
   }
 
-  // Achievement dedupe: each type is shown at most once per day.
-  static const _achievementDayPrefix = 'notification_achievement_day_';
+  // Achievement dedupe: each type is shown at most once per period
+  // (day / week / month key from AchievementRules). The prefix keeps its
+  // historic name so flags saved by older versions still apply.
+  static const _achievementPrefix = 'notification_achievement_day_';
 
-  bool achievementShownToday(String type) =>
-      _prefs.getString('$_achievementDayPrefix$type') ==
-      _dayKey(DateTime.now());
+  bool achievementShownIn(String type, String period) =>
+      _prefs.getString('$_achievementPrefix$type') == period;
 
-  Future<void> markAchievementShown(String type) async {
-    await _prefs.setString(
-      '$_achievementDayPrefix$type',
-      _dayKey(DateTime.now()),
-    );
+  Future<void> markAchievementShown(String type, String period) async {
+    await _prefs.setString('$_achievementPrefix$type', period);
   }
-
-  static String _dayKey(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }

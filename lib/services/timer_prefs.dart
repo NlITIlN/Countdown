@@ -36,6 +36,15 @@ class TimerPrefs {
     await _prefs.setInt(_secondsKey, clampSeconds(seconds));
   }
 
+  static const _keepScreenOnKey = 'keep_screen_on';
+
+  /// Не гасить экран во время отсчёта (по умолчанию — да).
+  bool keepScreenOn() => _prefs.getBool(_keepScreenOnKey) ?? true;
+
+  Future<void> saveKeepScreenOn(bool on) async {
+    await _prefs.setBool(_keepScreenOnKey, on);
+  }
+
   DateTime? loadEndsAt() {
     final raw = _prefs.getString(_endsAtKey);
     if (raw == null || raw.isEmpty) return null;

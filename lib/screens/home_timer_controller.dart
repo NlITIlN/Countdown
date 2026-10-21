@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 
 import '../l10n/strings.dart';
 import '../l10n/strings_plurals.dart';
+import '../models/achievement_rules.dart';
 import '../models/usage_stats.dart';
 import '../services/notification_prefs.dart';
 import '../services/notification_service.dart';
+import '../services/screen_awake.dart';
 import '../services/timer_prefs.dart';
 import '../services/usage_store.dart';
 
@@ -21,13 +23,15 @@ class HomeTimerController extends ChangeNotifier {
     required this.notificationPrefs,
     required this.localeIsRu,
     this.completionHold = const Duration(seconds: 3),
-  });
+    ScreenAwake? screenAwake,
+  }) : screenAwake = screenAwake ?? ScreenAwake();
 
   final TimerPrefs timerPrefs;
   final UsageStore usageStore;
   final NotificationService notifications;
   final NotificationPrefs notificationPrefs;
   final bool Function() localeIsRu;
+  final ScreenAwake screenAwake;
 
   /// Сколько держится состояние completed перед возвратом в idle.
   final Duration completionHold;
@@ -104,6 +108,7 @@ class HomeTimerController extends ChangeNotifier {
               : TimerState.running;
       ready = true;
       _notifyUpdate();
+      _applyScreenAwake();
 
       if (active) {
         final restoredEndsAt = timerPrefs.loadEndsAt();
@@ -146,6 +151,7 @@ class HomeTimerController extends ChangeNotifier {
 
     running = true;
     _setState(TimerState.running);
+    _applyScreenAwake();
     _startTicker();
   }
 
@@ -207,6 +213,15 @@ class HomeTimerController extends ChangeNotifier {
     );
   }
 
+  /// Экран не гаснет только пока идёт отсчёт и включена настройка.
+  void _applyScreenAwake() =>
+      screenAwake.set(running && timerPrefs.keepScreenOn());
+
+  Future<void> setKeepScreenOn(bool on) async {
+    await timerPrefs.saveKeepScreenOn(on);
+    _applyScreenAwake();
+  }
+
   Future<void> reset() async {
     _ticker?.cancel();
     await notifications.cancelSteps();
@@ -214,6 +229,7 @@ class HomeTimerController extends ChangeNotifier {
     running = false;
     remainingSeconds = totalSeconds;
     _setState(TimerState.idle);
+    _applyScreenAwake();
   }
 
   Future<void> handleCompletion({required bool notify}) async {
@@ -231,6 +247,7 @@ class HomeTimerController extends ChangeNotifier {
       running = false;
       remainingSeconds = totalSeconds;
       _setState(TimerState.completed);
+      _applyScreenAwake();
 
       // Возврат в idle после анимации — только если за это время не запустили новый таймер.
       _idleTimer?.cancel();
@@ -276,13 +293,15 @@ class HomeTimerController extends ChangeNotifier {
     await _checkAchievements(before, after, isRu);
   }
 
-  /// Каждый тип достижения показывается не чаще раза в день, за раз — только одно.
+  /// Каждый тип достижения — не чаще раза за свой период (день / неделя /
+  /// месяц), за одно завершение — только одно.
   Future<void> _checkAchievements(
       UsageStats before, UsageStats after, bool isRu) async {
     final s = S.forRu(isRu);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final todayCount = after.getTodayCount();
+    final day = AchievementRules.dayKey(now);
 
     // 1. Рекорд дня: сегодня больше, чем лучший из прошлых дней (первый запуск — не рекорд).
     final prevBest = after.days
@@ -291,6 +310,7 @@ class HomeTimerController extends ChangeNotifier {
     if (prevBest > 0 && todayCount > prevBest) {
       if (await _showAchievementOnce(
         'record',
+        period: day,
         title: s.achievementRecordTitle,
         body: s.achievementRecordBody(todayCount, prevBest),
       )) {
@@ -302,6 +322,7 @@ class HomeTimerController extends ChangeNotifier {
     if (after.streakDays >= 3 && after.streakDays > before.streakDays) {
       if (await _showAchievementOnce(
         'streak',
+        period: day,
         title: s.achievementStreakTitle,
         body: s.achievementStreakBody(after.streakDays),
       )) {
@@ -313,30 +334,57 @@ class HomeTimerController extends ChangeNotifier {
     if (todayCount == 1 && before.days.isNotEmpty) {
       final lastActive = before.days.first.date;
       if (today.difference(lastActive).inDays > 3) {
-        await _showAchievementOnce(
+        if (await _showAchievementOnce(
           'comeback',
+          period: day,
           title: s.achievementComebackTitle,
           body: s.achievementComebackBody,
-        );
+        )) {
+          return;
+        }
       }
+    }
+
+    // 4. Сильная неделя — раз в неделю.
+    final weekCount = AchievementRules.strongWeek(after, now);
+    if (weekCount != null) {
+      if (await _showAchievementOnce(
+        'strong_week',
+        period: AchievementRules.weekKey(now),
+        title: s.achievementStrongWeekTitle,
+        body: s.achievementStrongWeekBody(weekCount),
+      )) {
+        return;
+      }
+    }
+
+    // 5. Месяц идёт вверх — раз в месяц, с 15-го числа.
+    if (AchievementRules.monthUp(after, now)) {
+      await _showAchievementOnce(
+        'month_up',
+        period: AchievementRules.monthKey(now),
+        title: s.achievementMonthUpTitle,
+        body: s.achievementMonthUpBody,
+      );
     }
   }
 
   Future<bool> _showAchievementOnce(
     String type, {
+    required String period,
     required String title,
     required String body,
   }) async {
     final prefs = notificationPrefs;
     if (!prefs.notificationsEnabled()) return false;
-    if (prefs.achievementShownToday(type)) return false;
+    if (prefs.achievementShownIn(type, period)) return false;
     await notifications.showAchievement(
       title: title,
       body: body,
       playSound: prefs.soundEnabled(),
       vibrate: prefs.vibrationEnabled(),
     );
-    await prefs.markAchievementShown(type);
+    await prefs.markAchievementShown(type, period);
     return true;
   }
 
@@ -344,6 +392,7 @@ class HomeTimerController extends ChangeNotifier {
   void dispose() {
     _ticker?.cancel();
     _idleTimer?.cancel();
+    screenAwake.set(false);
     super.dispose();
   }
 }

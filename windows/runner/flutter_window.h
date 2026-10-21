@@ -3,6 +3,7 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
 
 #include <memory>
 
@@ -28,6 +29,12 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // «Не гасить экран» во время отсчёта — lib/services/screen_awake.dart.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      screen_channel_;
+
+  void RegisterScreenChannel();
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
