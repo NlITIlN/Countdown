@@ -40,7 +40,7 @@ Folder layout and responsibilities of the main Dart files.
 - `_mobile_notification_handler.dart` — Android / iOS via `flutter_local_notifications` + timezone. One Android channel per sound / vibration combination (on Android 8+ these are channel settings). Exact alarms when allowed, inexact otherwise.
 - `_desktop_notification_handler.dart` — Windows / macOS / Linux toasts via `local_notifier`, scheduling via in-process timers.
 - `notification_prefs.dart` — sound / vibration settings; per-type "achievement shown today" flags.
-- `timer_prefs.dart` — timer limits (`minMinutes`, `maxMinutes`, `defaultMinutes`, `clampMinutes`), saved minutes and `endsAt`.
+- `timer_prefs.dart` — timer limits in seconds (`minSeconds` 10, `maxSeconds` 300, `stepSeconds` 10, `clampSeconds`), saved duration (migrates the old minutes key) and `endsAt`.
 - `usage_store.dart` — completion timestamps (last 500) plus an all-time counter; tolerant to corrupted data.
 - `theme_prefs.dart` — saved theme.
 
@@ -49,7 +49,7 @@ Folder layout and responsibilities of the main Dart files.
 - `rings_timer_button.dart` — the three-ring timer button: progress arc, critical pulse, completion fade / resurface, press flash. Exposes `Semantics` for screen readers.
 
 ### Widgets (`widgets/`)
-- `control_panel.dart` — settings page with two tabs: timer (presets, ±, slider) and settings (language, theme, sound, vibration).
+- `control_panel.dart` — settings page with two tabs: timer (minute presets, ± and slider in 10 s steps) and settings (language, theme, notifications on/off, sound, vibration).
 - `expandable_corner_menu.dart` — the "⋯" corner menu that expands into statistics and settings buttons.
 
 ---

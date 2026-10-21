@@ -11,9 +11,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 class TestNotificationService extends NotificationService {
   final List<Map<String, String>> achievements = [];
   final List<int> badges = [];
+  int permissionRequests = 0;
+  int scheduled = 0;
+  int cancelled = 0;
+  int doneShown = 0;
 
   @override
-  Future<void> cancelSteps() async {}
+  Future<void> requestPermission() async {
+    permissionRequests++;
+  }
+
+  @override
+  Future<void> cancelSteps() async {
+    cancelled++;
+  }
 
   @override
   Future<void> scheduleSteps(
@@ -21,11 +32,15 @@ class TestNotificationService extends NotificationService {
       required int totalSeconds,
       required bool isRu,
       bool playSound = true,
-      bool vibrate = true}) async {}
+      bool vibrate = true}) async {
+    scheduled++;
+  }
 
   @override
   Future<void> showDone(
-      {required bool isRu, bool playSound = true, bool vibrate = true}) async {}
+      {required bool isRu, bool playSound = true, bool vibrate = true}) async {
+    doneShown++;
+  }
 
   @override
   Future<void> showBadge(
@@ -217,6 +232,62 @@ void main() {
     await controller.start();
     await Future<void>.delayed(const Duration(milliseconds: 50));
     expect(controller.currentState, TimerState.running);
+    controller.dispose();
+  });
+
+  test('notification permission is requested only on the first start',
+      () async {
+    final usage = TestUsageStore(
+      prefs,
+      before: UsageStats.empty,
+      after: UsageStats.empty,
+    );
+    final controller = controllerFor(usage);
+
+    await controller.start();
+    await controller.reset();
+    await controller.start();
+    expect(notifications.permissionRequests, 1);
+    controller.dispose();
+  });
+
+  test('notifications switched off: no permission, nothing scheduled or shown',
+      () async {
+    await NotificationPrefs(prefs).saveNotificationsEnabled(false);
+    final usage = TestUsageStore(
+      prefs,
+      before: _stats({0: 2, 1: 2}, streak: 2),
+      after: _stats({0: 3, 1: 2}, streak: 2),
+    );
+    final controller = controllerFor(usage);
+
+    await controller.start();
+    expect(notifications.permissionRequests, 0);
+    expect(notifications.scheduled, 0);
+
+    await controller.handleCompletion(notify: true);
+    expect(notifications.doneShown, 0);
+    expect(notifications.achievements, isEmpty);
+    expect(usage.recorded, 1, reason: 'statistics still counts');
+    controller.dispose();
+  });
+
+  test('toggling notifications during a run cancels and reschedules', () async {
+    await NotificationPrefs(prefs).saveNotificationsEnabled(false);
+    final controller = controllerFor(TestUsageStore(
+      prefs,
+      before: UsageStats.empty,
+      after: UsageStats.empty,
+    ));
+    await controller.start();
+
+    await controller.setNotificationsEnabled(true);
+    expect(notifications.permissionRequests, 1);
+    expect(notifications.scheduled, 1);
+
+    final cancelledBefore = notifications.cancelled;
+    await controller.setNotificationsEnabled(false);
+    expect(notifications.cancelled, cancelledBefore + 1);
     controller.dispose();
   });
 }

@@ -18,6 +18,8 @@ class S {
   String get themeLight => isRu ? 'Светлая' : 'Light';
   String get themeNeon => isRu ? 'Неоновая' : 'Neon';
   String get notifications => isRu ? 'Уведомления' : 'Notifications';
+  String get notificationsEnabled =>
+      isRu ? 'Присылать уведомления' : 'Send notifications';
   String get sound => isRu ? 'Звук' : 'Sound';
   String get soundDescription =>
       isRu ? 'Звук при уведомлениях' : 'Notification sound';
@@ -28,14 +30,23 @@ class S {
   String get english => 'English';
 
   String get timer => isRu ? 'Таймер' : 'Timer';
-  String get setMinutes => isRu ? 'Минуты' : 'Minutes';
+  String get setDuration => isRu ? 'Время' : 'Duration';
   String get apply => isRu ? 'Готово' : 'Done';
   String get reset => isRu ? 'Сброс' : 'Reset';
   String get done => isRu ? 'Готово' : 'Done';
   String get tapHint => isRu ? 'нажмите' : 'tap';
   String get minUnit => isRu ? 'мин' : 'min';
 
-  String minutesLabel(int minutes) => '$minutes $minUnit';
+  String get secUnit => isRu ? 'сек' : 'sec';
+
+  /// «40 сек», «3 мин», «1 мин 30 сек».
+  String durationLabel(int seconds) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    if (m == 0) return '$s $secUnit';
+    if (s == 0) return '$m $minUnit';
+    return '$m $minUnit $s $secUnit';
+  }
 
   String get analytics => isRu ? 'Статистика' : 'Analytics';
   String get notificationsHint => isRu

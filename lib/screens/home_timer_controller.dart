@@ -35,8 +35,8 @@ class HomeTimerController extends ChangeNotifier {
   /// Последние секунды, когда кольца пульсируют.
   static const _criticalSeconds = 10;
 
-  int totalSeconds = TimerPrefs.defaultMinutes * 60;
-  int remainingSeconds = TimerPrefs.defaultMinutes * 60;
+  int totalSeconds = TimerPrefs.defaultSeconds;
+  int remainingSeconds = TimerPrefs.defaultSeconds;
   bool running = false;
   bool ready = false;
   TimerState currentState = TimerState.idle;
@@ -75,8 +75,7 @@ class HomeTimerController extends ChangeNotifier {
   Future<void> bootstrap() async {
     final isRu = localeIsRu();
     try {
-      final minutes = timerPrefs.loadMinutes();
-      final total = minutes * 60;
+      final total = timerPrefs.loadSeconds();
       var remaining = total;
       var active = false;
 
@@ -109,13 +108,7 @@ class HomeTimerController extends ChangeNotifier {
       if (active) {
         final restoredEndsAt = timerPrefs.loadEndsAt();
         if (restoredEndsAt != null) {
-          await notifications.scheduleSteps(
-            endsAt: restoredEndsAt,
-            totalSeconds: total,
-            isRu: isRu,
-            playSound: notificationPrefs.soundEnabled(),
-            vibrate: notificationPrefs.vibrationEnabled(),
-          );
+          await _scheduleDone(restoredEndsAt, total);
         }
         _startTicker();
       }
@@ -123,37 +116,33 @@ class HomeTimerController extends ChangeNotifier {
       if (kDebugMode) {
         debugPrint('bootstrap failed: $e\n$st');
       }
-      totalSeconds = TimerPrefs.defaultMinutes * 60;
-      remainingSeconds = TimerPrefs.defaultMinutes * 60;
+      totalSeconds = TimerPrefs.defaultSeconds;
+      remainingSeconds = TimerPrefs.defaultSeconds;
       running = false;
       ready = true;
       _notifyUpdate();
     }
   }
 
-  Future<void> setMinutes(int minutes) async {
+  Future<void> setDurationSeconds(int seconds) async {
     if (!canEdit) return;
-    final clamped = TimerPrefs.clampMinutes(minutes);
-    final seconds = clamped * 60;
-    await timerPrefs.saveMinutes(clamped);
-    totalSeconds = seconds;
-    remainingSeconds = seconds;
+    final clamped = TimerPrefs.clampSeconds(seconds);
+    await timerPrefs.saveSeconds(clamped);
+    totalSeconds = clamped;
+    remainingSeconds = clamped;
     _notifyUpdate();
   }
 
   Future<void> start() async {
     _idleTimer?.cancel();
-    final seconds = remainingSeconds.clamp(1, TimerPrefs.maxMinutes * 60);
+    if (notificationPrefs.notificationsEnabled()) {
+      await _ensurePermissionAsked();
+    }
+    final seconds = remainingSeconds.clamp(1, TimerPrefs.maxSeconds);
     final endsAt = DateTime.now().add(Duration(seconds: seconds));
     await timerPrefs.saveEndsAt(endsAt);
 
-    await notifications.scheduleSteps(
-      endsAt: endsAt,
-      totalSeconds: seconds,
-      isRu: localeIsRu(),
-      playSound: notificationPrefs.soundEnabled(),
-      vibrate: notificationPrefs.vibrationEnabled(),
-    );
+    await _scheduleDone(endsAt, seconds);
 
     running = true;
     _setState(TimerState.running);
@@ -184,6 +173,38 @@ class HomeTimerController extends ChangeNotifier {
     } else if (running) {
       _setState(TimerState.running);
     }
+  }
+
+  /// Главный выключатель уведомлений (настройки). Выключение отменяет
+  /// запланированное уведомление, включение — спрашивает разрешение (если ещё
+  /// не спрашивали) и планирует уведомление для идущего отсчёта.
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    await notificationPrefs.saveNotificationsEnabled(enabled);
+    if (!enabled) {
+      await notifications.cancelSteps();
+      return;
+    }
+    await _ensurePermissionAsked();
+    final endsAt = this.endsAt;
+    if (endsAt != null) await _scheduleDone(endsAt, totalSeconds);
+  }
+
+  /// Системный диалог разрешения — один раз за всё время.
+  Future<void> _ensurePermissionAsked() async {
+    if (notificationPrefs.permissionAsked()) return;
+    await notifications.requestPermission();
+    await notificationPrefs.markPermissionAsked();
+  }
+
+  Future<void> _scheduleDone(DateTime endsAt, int totalSeconds) async {
+    if (!notificationPrefs.notificationsEnabled()) return;
+    await notifications.scheduleSteps(
+      endsAt: endsAt,
+      totalSeconds: totalSeconds,
+      isRu: localeIsRu(),
+      playSound: notificationPrefs.soundEnabled(),
+      vibrate: notificationPrefs.vibrationEnabled(),
+    );
   }
 
   Future<void> reset() async {
@@ -221,11 +242,13 @@ class HomeTimerController extends ChangeNotifier {
         if (notificationPrefs.vibrationEnabled()) {
           HapticFeedback.heavyImpact();
         }
-        await notifications.showDone(
-          isRu: localeIsRu(),
-          playSound: notificationPrefs.soundEnabled(),
-          vibrate: notificationPrefs.vibrationEnabled(),
-        );
+        if (notificationPrefs.notificationsEnabled()) {
+          await notifications.showDone(
+            isRu: localeIsRu(),
+            playSound: notificationPrefs.soundEnabled(),
+            vibrate: notificationPrefs.vibrationEnabled(),
+          );
+        }
       }
       await _notifyMilestones(before, after, localeIsRu());
     } finally {
@@ -238,12 +261,14 @@ class HomeTimerController extends ChangeNotifier {
       UsageStats before, UsageStats after, bool isRu) async {
     for (final milestone in [10, 25, 50, 100]) {
       if (before.totalCount < milestone && after.totalCount >= milestone) {
-        await notifications.showBadge(
-          count: milestone,
-          isRu: isRu,
-          playSound: notificationPrefs.soundEnabled(),
-          vibrate: notificationPrefs.vibrationEnabled(),
-        );
+        if (notificationPrefs.notificationsEnabled()) {
+          await notifications.showBadge(
+            count: milestone,
+            isRu: isRu,
+            playSound: notificationPrefs.soundEnabled(),
+            vibrate: notificationPrefs.vibrationEnabled(),
+          );
+        }
         return;
       }
     }
@@ -303,6 +328,7 @@ class HomeTimerController extends ChangeNotifier {
     required String body,
   }) async {
     final prefs = notificationPrefs;
+    if (!prefs.notificationsEnabled()) return false;
     if (prefs.achievementShownToday(type)) return false;
     await notifications.showAchievement(
       title: title,

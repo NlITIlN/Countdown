@@ -28,9 +28,11 @@ void main() async {
   final themePrefs = ThemePrefs(prefs);
   final initialTheme = themePrefs.loadTheme();
 
+  // Уведомления настраиваются после первого кадра, чтобы не задерживать
+  // старт (на телефоне это ещё и разбор базы часовых поясов). Разрешение
+  // спрашивается при первом запуске таймера (HomeTimerController.start).
   final notifications = NotificationService();
-  await notifications.init();
-  await notifications.requestPermission();
+  WidgetsBinding.instance.addPostFrameCallback((_) => notifications.init());
 
   runApp(
     CountdownApp(

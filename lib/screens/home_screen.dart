@@ -72,8 +72,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _setMinutes(int minutes) async {
-    await _timerController.setMinutes(minutes);
+  Future<void> _setDuration(int seconds) async {
+    await _timerController.setDurationSeconds(seconds);
   }
 
   void _onCircleTap() {
@@ -175,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           );
                         },
                         onSettings: () async {
-                          final minutes = _timerController.totalSeconds ~/ 60;
+                          final seconds = _timerController.totalSeconds;
                           await Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (ctx) => Scaffold(
@@ -189,17 +189,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 body: SafeArea(
                                   child: ControlPanel(
                                     strings: s,
-                                    initialMinutes: minutes,
+                                    initialSeconds: seconds,
                                     running: _timerController.running,
                                     notificationPrefs: widget.notificationPrefs,
                                     onTimerApply: (value) async {
-                                      if (value != minutes) {
-                                        await _setMinutes(value);
+                                      if (value != seconds) {
+                                        await _setDuration(value);
                                       }
                                     },
                                     onLocaleChanged: widget.onLocaleChanged,
                                     themeMode: widget.themeMode,
                                     onThemeChanged: widget.onThemeChanged,
+                                    onNotificationsChanged: _timerController
+                                        .setNotificationsEnabled,
                                     onReset: _timerController.running
                                         ? () async {
                                             await _timerController.reset();

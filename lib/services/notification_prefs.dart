@@ -20,6 +20,25 @@ class NotificationPrefs {
     await _prefs.setBool(_vibrateKey, enabled);
   }
 
+  static const _enabledKey = 'notifications_enabled';
+
+  /// Главный выключатель: false — никаких уведомлений (статистика и награды
+  /// всё равно считаются).
+  bool notificationsEnabled() => _prefs.getBool(_enabledKey) ?? true;
+
+  Future<void> saveNotificationsEnabled(bool enabled) async {
+    await _prefs.setBool(_enabledKey, enabled);
+  }
+
+  static const _permissionAskedKey = 'notification_permission_asked';
+
+  /// Разрешение спрашиваем один раз — при первом запуске таймера.
+  bool permissionAsked() => _prefs.getBool(_permissionAskedKey) ?? false;
+
+  Future<void> markPermissionAsked() async {
+    await _prefs.setBool(_permissionAskedKey, true);
+  }
+
   // Achievement dedupe: each type is shown at most once per day.
   static const _achievementDayPrefix = 'notification_achievement_day_';
 
