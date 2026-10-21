@@ -7,6 +7,8 @@ import 'package:local_notifier/local_notifier.dart';
 import '../l10n/strings.dart';
 
 class DesktopNotificationHandler {
+  static const idDone = 100;
+
   final Map<int, Timer> _timers = {};
 
   static bool get isDesktop {
@@ -37,7 +39,7 @@ class DesktopNotificationHandler {
 
     try {
       await _scheduleNotification(
-        id: 100,
+        id: idDone,
         at: endsAt,
         title: S.forRu(isRu).timerDoneTitle,
         body: S.forRu(isRu).timerDoneScheduledBody,
@@ -52,6 +54,18 @@ class DesktopNotificationHandler {
       timer.cancel();
     }
     _timers.clear();
+  }
+
+  /// Забирает уведомление о завершении: true — показать сейчас (запланированное
+  /// ещё не сработало и отменено, или его не было); false — оно уже показано.
+  Future<bool> claimDone() async {
+    final timer = _timers.remove(idDone);
+    if (timer == null) return true;
+    if (timer.isActive) {
+      timer.cancel();
+      return true;
+    }
+    return false;
   }
 
   Future<void> show(
@@ -81,8 +95,6 @@ class DesktopNotificationHandler {
     final delay = at.difference(DateTime.now());
     if (delay.isNegative) return;
 
-    _timers[id] = Timer(delay, () {
-      LocalNotification(title: title, body: body).show();
-    });
+    _timers[id] = Timer(delay, () => show(title, body, id: id));
   }
 }

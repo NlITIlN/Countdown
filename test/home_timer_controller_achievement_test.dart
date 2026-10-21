@@ -37,7 +37,7 @@ class TestNotificationService extends NotificationService {
   }
 
   @override
-  Future<void> showDone(
+  Future<void> deliverDone(
       {required bool isRu, bool playSound = true, bool vibrate = true}) async {
     doneShown++;
   }
@@ -288,6 +288,23 @@ void main() {
     final cancelledBefore = notifications.cancelled;
     await controller.setNotificationsEnabled(false);
     expect(notifications.cancelled, cancelledBefore + 1);
+    controller.dispose();
+  });
+
+  test('completion hands the done notification to deliverDone, not cancel',
+      () async {
+    final controller = controllerFor(TestUsageStore(
+      prefs,
+      before: UsageStats.empty,
+      after: UsageStats.empty,
+    ));
+    await controller.start();
+    final cancelledBefore = notifications.cancelled;
+
+    await controller.handleCompletion(notify: true);
+    expect(notifications.doneShown, 1);
+    expect(notifications.cancelled, cancelledBefore,
+        reason: 'the scheduled one must not be cancelled before deliverDone');
     controller.dispose();
   });
 }

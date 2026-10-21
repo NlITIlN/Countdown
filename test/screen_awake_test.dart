@@ -31,7 +31,7 @@ class _SilentNotifications extends NotificationService {
       bool vibrate = true}) async {}
 
   @override
-  Future<void> showDone(
+  Future<void> deliverDone(
       {required bool isRu, bool playSound = true, bool vibrate = true}) async {}
 }
 

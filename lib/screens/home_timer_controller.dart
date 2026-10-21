@@ -237,7 +237,6 @@ class HomeTimerController extends ChangeNotifier {
     _completing = true;
     try {
       _ticker?.cancel();
-      await notifications.cancelSteps();
       await timerPrefs.clearEndsAt();
 
       final before = await usageStore.loadStats();
@@ -255,17 +254,19 @@ class HomeTimerController extends ChangeNotifier {
         if (currentState == TimerState.completed) _setState(TimerState.idle);
       });
 
-      if (notify) {
-        if (notificationPrefs.vibrationEnabled()) {
-          HapticFeedback.heavyImpact();
-        }
-        if (notificationPrefs.notificationsEnabled()) {
-          await notifications.showDone(
-            isRu: localeIsRu(),
-            playSound: notificationPrefs.soundEnabled(),
-            vibrate: notificationPrefs.vibrationEnabled(),
-          );
-        }
+      if (notify && notificationPrefs.vibrationEnabled()) {
+        HapticFeedback.heavyImpact();
+      }
+      if (notify && notificationPrefs.notificationsEnabled()) {
+        // Ровно одно уведомление: запланированное, если система его уже
+        // показала, иначе — сейчас.
+        await notifications.deliverDone(
+          isRu: localeIsRu(),
+          playSound: notificationPrefs.soundEnabled(),
+          vibrate: notificationPrefs.vibrationEnabled(),
+        );
+      } else {
+        await notifications.cancelSteps();
       }
       await _notifyMilestones(before, after, localeIsRu());
     } finally {

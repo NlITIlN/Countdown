@@ -22,6 +22,15 @@ class S {
       isRu ? 'Присылать уведомления' : 'Send notifications';
   String get sound => isRu ? 'Звук' : 'Sound';
   String get screen => isRu ? 'Экран' : 'Screen';
+  String get clearStats => isRu ? 'Очистить статистику' : 'Clear statistics';
+  String get clearStatsConfirmTitle =>
+      isRu ? 'Очистить статистику?' : 'Clear statistics?';
+  String get clearStatsConfirmBody => isRu
+      ? 'Вся история запусков, серия и значки будут удалены. Это нельзя отменить.'
+      : 'All session history, your streak and badges will be deleted. This cannot be undone.';
+  String get cancel => isRu ? 'Отмена' : 'Cancel';
+  String get delete => isRu ? 'Удалить' : 'Delete';
+  String get statsCleared => isRu ? 'Статистика очищена' : 'Statistics cleared';
   String get keepScreenOn =>
       isRu ? 'Не гасить во время отсчёта' : 'Keep on during countdown';
   String get soundDescription =>

@@ -37,6 +37,23 @@ void main() {
     expect((await store.loadStats()).totalCount, 501);
   });
 
+  test('clear removes history and the all-time counter', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = UsageStore(await SharedPreferences.getInstance());
+    await store.recordCompletion();
+    await store.recordCompletion();
+    expect((await store.loadStats()).totalCount, 2);
+
+    await store.clear();
+    final stats = await store.loadStats();
+    expect(stats.totalCount, 0);
+    expect(stats.days, isEmpty);
+
+    // Новый отсчёт после очистки — с нуля.
+    await store.recordCompletion();
+    expect((await store.loadStats()).totalCount, 1);
+  });
+
   test('corrupted usage data does not crash and starts fresh', () async {
     SharedPreferences.setMockInitialValues({'usage_events': '{not json'});
     final store = UsageStore(await SharedPreferences.getInstance());

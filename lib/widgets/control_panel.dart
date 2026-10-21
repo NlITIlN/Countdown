@@ -20,6 +20,7 @@ class ControlPanel extends StatefulWidget {
     required this.onNotificationsChanged,
     required this.keepScreenOn,
     required this.onKeepScreenOnChanged,
+    required this.onClearStatistics,
     this.onReset,
   });
 
@@ -36,6 +37,7 @@ class ControlPanel extends StatefulWidget {
   final ValueChanged<bool> onNotificationsChanged;
   final bool keepScreenOn;
   final ValueChanged<bool> onKeepScreenOnChanged;
+  final Future<void> Function() onClearStatistics;
   final VoidCallback? onReset;
 
   @override
@@ -156,6 +158,7 @@ class _ControlPanelState extends State<ControlPanel>
                   onNotificationsChanged: _setNotificationsEnabled,
                   keepScreenOn: _keepScreenOn,
                   onKeepScreenOnChanged: _setKeepScreenOn,
+                  onClearStatistics: widget.onClearStatistics,
                   onSoundChanged: _setSoundEnabled,
                   onVibrationChanged: _setVibrationEnabled,
                   onLocaleChanged: widget.onLocaleChanged,
@@ -342,6 +345,7 @@ class _SettingsTabContent extends StatelessWidget {
     required this.onNotificationsChanged,
     required this.keepScreenOn,
     required this.onKeepScreenOnChanged,
+    required this.onClearStatistics,
     required this.onSoundChanged,
     required this.onVibrationChanged,
     required this.onLocaleChanged,
@@ -357,10 +361,37 @@ class _SettingsTabContent extends StatelessWidget {
   final ValueChanged<bool> onNotificationsChanged;
   final bool keepScreenOn;
   final ValueChanged<bool> onKeepScreenOnChanged;
+  final Future<void> Function() onClearStatistics;
   final ValueChanged<bool> onSoundChanged;
   final ValueChanged<bool> onVibrationChanged;
   final ValueChanged<AppLocale> onLocaleChanged;
   final double scale;
+
+  Future<void> _confirmClearStatistics(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.clearStatsConfirmTitle),
+        content: Text(strings.clearStatsConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(strings.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(strings.delete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await onClearStatistics();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(strings.statsCleared)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -420,6 +451,12 @@ class _SettingsTabContent extends StatelessWidget {
             title: strings.keepScreenOn,
             value: keepScreenOn,
             onChanged: onKeepScreenOnChanged,
+          ),
+          SizedBox(height: 12 * scale),
+          _SectionLabel(text: strings.analytics, scale: scale),
+          TextButton(
+            onPressed: () => _confirmClearStatistics(context),
+            child: Text(strings.clearStats),
           ),
         ],
       ),

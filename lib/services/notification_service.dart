@@ -69,7 +69,10 @@ class NotificationService {
     await _desktop.cancelSteps();
   }
 
-  Future<void> showDone({
+  /// Уведомление о завершении — ровно одно. Если запланированное уже показано
+  /// системой, ничего не делает; если ещё нет (или его не было) — показывает
+  /// сейчас, отменив запланированное.
+  Future<void> deliverDone({
     required bool isRu,
     bool playSound = true,
     bool vibrate = true,
@@ -80,6 +83,7 @@ class NotificationService {
     final body = s.timerDoneBody;
 
     if (MobileNotificationHandler.isMobile) {
+      if (!await _mobile.claimDone()) return;
       await _mobile.show(
         title,
         body,
@@ -88,6 +92,7 @@ class NotificationService {
         vibrate: vibrate,
       );
     } else {
+      if (!await _desktop.claimDone()) return;
       await _desktop.show(
         title,
         body,

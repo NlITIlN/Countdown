@@ -206,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                         widget.timerPrefs.keepScreenOn(),
                                     onKeepScreenOnChanged:
                                         _timerController.setKeepScreenOn,
+                                    onClearStatistics: widget.usageStore.clear,
                                     onReset: _timerController.running
                                         ? () async {
                                             await _timerController.reset();
