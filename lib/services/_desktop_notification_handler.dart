@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:local_notifier/local_notifier.dart';
 
+import '../l10n/strings.dart';
+
 class DesktopNotificationHandler {
   final Map<int, Timer> _timers = {};
 
@@ -37,35 +39,9 @@ class DesktopNotificationHandler {
       await _scheduleNotification(
         id: 100,
         at: endsAt,
-        title: isRu ? 'Таймер завершён' : 'Timer finished',
-        body: isRu
-            ? 'Время вышло — нажмите для нового запуска'
-            : 'Time is up — tap to start again',
+        title: S.forRu(isRu).timerDoneTitle,
+        body: S.forRu(isRu).timerDoneScheduledBody,
       );
-
-      if (totalSeconds >= 120) {
-        final halfAt = endsAt.subtract(Duration(seconds: totalSeconds ~/ 2));
-        if (halfAt.isAfter(DateTime.now())) {
-          await _scheduleNotification(
-            id: 101,
-            at: halfAt,
-            title: isRu ? 'Половина пути' : 'Halfway there',
-            body: isRu ? 'Осталось 50% времени' : '50% of time remaining',
-          );
-        }
-      }
-
-      if (totalSeconds > 15) {
-        final tenAt = endsAt.subtract(const Duration(seconds: 10));
-        if (tenAt.isAfter(DateTime.now())) {
-          await _scheduleNotification(
-            id: 102,
-            at: tenAt,
-            title: isRu ? '10 секунд' : '10 seconds',
-            body: isRu ? 'Скоро окончание таймера' : 'Timer ending soon',
-          );
-        }
-      }
     } catch (e) {
       debugPrint('scheduleSteps failed: $e');
     }

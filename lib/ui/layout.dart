@@ -23,7 +23,8 @@ class AppMetrics {
 
   factory AppMetrics.of(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final textScaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.35);
+    final textScaler =
+        MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.35);
     return AppMetrics._(
       size: mq.size,
       viewPadding: mq.viewPadding,
@@ -42,8 +43,7 @@ class AppMetrics {
       width >= 600 || (aspectRatio > 1.2 && shortestSide >= 360);
 
   /// Мало места по высоте (ландшафт, cover-экран с клавиатурой).
-  bool get isCompactHeight =>
-      height - viewPadding.vertical < 520;
+  bool get isCompactHeight => height - viewPadding.vertical < 520;
 
   /// Узкая половинка Z Fold / маленький Android.
   bool get isNarrowPhone => width < 340;
@@ -58,16 +58,14 @@ class AppMetrics {
   }
 
   /// Минимум 44 pt — рекомендация Apple/Google для зоны нажатия.
-  double get cornerButtonSize =>
-      (shortestSide * 0.117).clamp(44.0, 52.0);
+  double get cornerButtonSize => (shortestSide * 0.117).clamp(44.0, 52.0);
 
   double get usableWidth => width - edgeInset * 2;
   double get usableHeight =>
       height - viewPadding.top - viewPadding.bottom - edgeInset * 2;
 
   /// На широких экранах UI не растягивается на всю ширину — остаётся «как телефон» по центру.
-  double get contentMaxWidth =>
-      isWideLayout ? maxContentWidth : width;
+  double get contentMaxWidth => isWideLayout ? maxContentWidth : width;
 
   double get circleDiameter {
     final cornerReserve = cornerButtonSize + 16;
@@ -80,7 +78,8 @@ class AppMetrics {
     final proportional =
         math.min(usableWidth * widthFactor, usableHeight * heightFactor);
 
-    return math.min(byWidth, math.min(byHeight, proportional))
+    return math
+        .min(byWidth, math.min(byHeight, proportional))
         .clamp(minCircle, maxCircle);
   }
 

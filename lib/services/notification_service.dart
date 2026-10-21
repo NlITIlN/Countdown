@@ -1,10 +1,9 @@
+import '../l10n/strings.dart';
 import '_desktop_notification_handler.dart';
 import '_mobile_notification_handler.dart';
 
 class NotificationService {
   static const idDone = 100;
-  static const idHalf = 101;
-  static const idTenSec = 102;
   static const idBadge = 103;
   static const idAchievementStart = 200; // диапазон для достижений
 
@@ -71,9 +70,10 @@ class NotificationService {
     bool playSound = true,
     bool vibrate = true,
   }) async {
-    final title = isRu ? 'Таймер завершён' : 'Timer finished';
-    final body = isRu ? 'Время вышло' : 'Time is up';
-    
+    final s = S.forRu(isRu);
+    final title = s.timerDoneTitle;
+    final body = s.timerDoneBody;
+
     if (MobileNotificationHandler.isMobile) {
       await _mobile.show(
         title,
@@ -99,11 +99,10 @@ class NotificationService {
     bool playSound = true,
     bool vibrate = true,
   }) async {
-    final title = isRu ? 'Новый значок!' : 'New badge!';
-    final body = isRu
-        ? 'Вы завершили таймер $count раз'
-        : 'You completed the timer $count times';
-    
+    final s = S.forRu(isRu);
+    final title = s.badgeNotificationTitle;
+    final body = s.badgeNotificationBody(count);
+
     if (MobileNotificationHandler.isMobile) {
       await _mobile.show(
         title,
@@ -132,7 +131,7 @@ class NotificationService {
   }) async {
     // Генерируем уникальный ID для каждого достижения
     final id = idAchievementStart + DateTime.now().millisecond % 100;
-    
+
     if (MobileNotificationHandler.isMobile) {
       await _mobile.show(
         title,
@@ -152,4 +151,3 @@ class NotificationService {
     }
   }
 }
-

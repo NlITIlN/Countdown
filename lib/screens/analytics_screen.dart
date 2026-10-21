@@ -45,7 +45,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               width: 36 * scale,
               height: 4 * scale,
               decoration: BoxDecoration(
-                color: onSurface.withValues(alpha: 60),
+                color: onSurface.withValues(alpha: 0.24),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -56,7 +56,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             style: TextStyle(
               fontSize: 17 * scale,
               fontWeight: FontWeight.w500,
-              color: onSurface.withValues(alpha: 77),
+              color: onSurface.withValues(alpha: 0.3),
               letterSpacing: 0.5,
             ),
           ),
@@ -87,6 +87,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                             SizedBox(height: 24 * scale),
                             _TimelineWidget(
                               stats: stats,
+                              strings: widget.strings,
                               scale: scale,
                               onSurface: onSurface,
                             ),
@@ -149,7 +150,7 @@ class _StatsSummary extends StatelessWidget {
           strings.analyticsEmpty,
           style: TextStyle(
             fontSize: 14 * scale,
-            color: onSurface.withValues(alpha: 77),
+            color: onSurface.withValues(alpha: 0.3),
             height: 1.4,
           ),
         ),
@@ -178,7 +179,7 @@ class _StatsSummary extends StatelessWidget {
                 strings.sessionsLabel(stats.totalCount).toLowerCase(),
                 style: TextStyle(
                   fontSize: 15 * scale,
-                  color: onSurface.withValues(alpha: 77),
+                  color: onSurface.withValues(alpha: 0.3),
                 ),
               ),
             ),
@@ -190,7 +191,7 @@ class _StatsSummary extends StatelessWidget {
             strings.streakDays(stats.streakDays).toLowerCase(),
             style: TextStyle(
               fontSize: 13 * scale,
-              color: onSurface.withValues(alpha: 77),
+              color: onSurface.withValues(alpha: 0.3),
             ),
           ),
         ],
@@ -199,7 +200,7 @@ class _StatsSummary extends StatelessWidget {
           strings.badgeTitle(stats.badgeKey).toLowerCase(),
           style: TextStyle(
             fontSize: 13 * scale,
-            color: onSurface.withValues(alpha: 77),
+            color: onSurface.withValues(alpha: 0.3),
           ),
         ),
       ],
@@ -210,11 +211,13 @@ class _StatsSummary extends StatelessWidget {
 class _TimelineWidget extends StatelessWidget {
   const _TimelineWidget({
     required this.stats,
+    required this.strings,
     required this.scale,
     required this.onSurface,
   });
 
   final UsageStats stats;
+  final S strings;
   final double scale;
   final Color onSurface;
 
@@ -227,9 +230,7 @@ class _TimelineWidget extends StatelessWidget {
     // Calculate median activity for efficiency indicator
     final counts = stats.days.map((d) => d.count).toList();
     counts.sort();
-    final median = counts.isEmpty
-        ? 0
-        : counts[(counts.length / 2).floor()];
+    final median = counts.isEmpty ? 0 : counts[(counts.length / 2).floor()];
 
     // Generate list of days from today going back (limit to 30 days)
     final now = DateTime.now();
@@ -257,10 +258,10 @@ class _TimelineWidget extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'activity timeline',
+          strings.activityTimeline.toLowerCase(),
           style: TextStyle(
             fontSize: 13 * scale,
-            color: onSurface.withValues(alpha: 77),
+            color: onSurface.withValues(alpha: 0.3),
             fontWeight: FontWeight.w400,
           ),
         ),
@@ -271,6 +272,7 @@ class _TimelineWidget extends StatelessWidget {
           children: [
             for (final entry in sortedDays)
               _TimelineDay(
+                strings: strings,
                 date: entry.key,
                 count: entry.value,
                 median: median,
@@ -285,12 +287,14 @@ class _TimelineWidget extends StatelessWidget {
 
 class _TimelineDay extends StatelessWidget {
   const _TimelineDay({
+    required this.strings,
     required this.date,
     required this.count,
     required this.median,
     required this.scale,
   });
 
+  final S strings;
   final DateTime date;
   final int count;
   final int median;
@@ -318,7 +322,7 @@ class _TimelineDay extends StatelessWidget {
         : onSurface.withValues(alpha: (opacity * 0.5).clamp(0.0, 1.0));
 
     return Tooltip(
-      message: '${date.day}/${date.month}: $count sessions',
+      message: strings.dayActivity(strings.formatDay(date), count),
       child: Container(
         width: 28 * scale,
         height: 28 * scale,
@@ -327,7 +331,8 @@ class _TimelineDay extends StatelessWidget {
           borderRadius: BorderRadius.circular(4 * scale),
           border: hasActivity
               ? Border.all(
-                  color: const Color(0xFF6EE7A0).withValues(alpha: opacity * 0.6),
+                  color:
+                      const Color(0xFF6EE7A0).withValues(alpha: opacity * 0.6),
                   width: 0.5,
                 )
               : null,

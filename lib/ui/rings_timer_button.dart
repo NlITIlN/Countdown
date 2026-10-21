@@ -12,6 +12,9 @@ class RingsTimerButton extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
+  /// Что произойдёт по нажатию — для экранных дикторов.
+  final String? semanticsHint;
+
   const RingsTimerButton({
     super.key,
     required this.timeText,
@@ -19,6 +22,7 @@ class RingsTimerButton extends StatefulWidget {
     required this.state,
     required this.onTap,
     required this.onLongPress,
+    this.semanticsHint,
   });
 
   @override
@@ -33,9 +37,8 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   late AnimationController _resurfaceController;
   late AnimationController _progressController;
 
-  // Press animation
+  // Press animation (UI-only, independent of timer state)
   late Animation<double> _pressScale;
-  late Animation<double> _pressOpacity;
 
   // Pulse animation (for critical state)
   late Animation<double> _pulseScale;
@@ -53,15 +56,12 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   void initState() {
     super.initState();
 
-    // Press animation: 150ms scale and opacity
+    // Press flash: scale 1.0 → 1.1 → 1.0, 150ms total
     _pressController = AnimationController(
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 75),
       vsync: this,
     );
     _pressScale = Tween<double>(begin: 1.0, end: 1.1).animate(
-      CurvedAnimation(parent: _pressController, curve: Curves.easeOut),
-    );
-    _pressOpacity = Tween<double>(begin: 0.7, end: 1.0).animate(
       CurvedAnimation(parent: _pressController, curve: Curves.easeOut),
     );
 
@@ -129,9 +129,14 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
       ..forward();
   }
 
+  void _playPress() {
+    _pressController.forward(from: 0).then((_) {
+      if (mounted) _pressController.reverse();
+    });
+  }
+
   void _handleStateChange(TimerState state) {
-    // Stop all animations first
-    _pressController.stop();
+    // Stop state animations first (press flash is independent and keeps playing)
     _pulseController.stop();
     _fadeController.stop();
     _resurfaceController.stop();
@@ -139,17 +144,9 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
     switch (state) {
       case TimerState.idle:
         // No animation, static state
-        _pressController.reset();
         _pulseController.reset();
         _fadeController.reset();
         _resurfaceController.reset();
-        break;
-
-      case TimerState.press:
-        // Trigger press animation
-        _pressController.forward().then((_) {
-          _pressController.reverse();
-        });
         break;
 
       case TimerState.running:
@@ -190,84 +187,89 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
     final metrics = AppMetrics.of(context);
     final size = metrics.timerButtonSize; // ~150-200px
 
-    return GestureDetector(
+    return Semantics(
+      button: true,
+      label: widget.timeText,
+      hint: widget.semanticsHint,
+      excludeSemantics: true,
       onTap: widget.onTap,
-      onLongPress: widget.onLongPress,
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Main ring painter with state-based animations
-            RepaintBoundary(
-              child: AnimatedBuilder(
-                animation: Listenable.merge([
-                  _pressController,
-                  _pulseController,
-                  _fadeController,
-                  _resurfaceController,
-                  _progressController,
-                ]),
-                builder: (context, _) {
-                  double scale = 1.0;
-                  double opacity = 1.0;
+      child: GestureDetector(
+        onTapDown: (_) => _playPress(),
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Main ring painter with state-based animations
+              RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: Listenable.merge([
+                    _pressController,
+                    _pulseController,
+                    _fadeController,
+                    _resurfaceController,
+                    _progressController,
+                  ]),
+                  builder: (context, _) {
+                    double scale = 1.0;
+                    double opacity = 1.0;
 
-                  if (_pressController.isAnimating) {
-                    scale = _pressScale.value;
-                    opacity = _pressOpacity.value;
-                  }
-
-                  if (widget.state == TimerState.critical) {
-                    scale = _pulseScale.value;
-                    opacity = _pulseOpacity.value;
-                  }
-
-                  if (widget.state == TimerState.completed) {
-                    opacity = _fadeOpacity.value;
-                    if (_resurfaceController.isAnimating) {
-                      opacity = _resurfaceOpacity.value;
+                    if (widget.state == TimerState.critical) {
+                      scale = _pulseScale.value;
+                      opacity = _pulseOpacity.value;
                     }
-                  }
 
-                  final progress = _progressController.isAnimating
-                      ? _progressAnimation.value
-                      : widget.progress;
+                    scale *= _pressScale.value;
 
-                  if (widget.state == TimerState.completed &&
-                      _resurfaceController.isAnimating) {
-                    scale *= _resurfaceScale.value;
-                  }
+                    if (widget.state == TimerState.completed) {
+                      opacity = _fadeOpacity.value;
+                      if (_resurfaceController.isAnimating) {
+                        opacity = _resurfaceOpacity.value;
+                      }
+                    }
 
-                  return Transform.scale(
-                    scale: scale,
-                    child: Opacity(
-                      opacity: opacity,
-                      child: CustomPaint(
-                        size: Size(size, size),
-                        painter: _RingsPainter(
-                          progress: progress,
-                          state: widget.state,
-                          fadeProgress: _fadeController.value,
-                          resurfaceProgress: _resurfaceController.value,
+                    final progress = _progressController.isAnimating
+                        ? _progressAnimation.value
+                        : widget.progress;
+
+                    if (widget.state == TimerState.completed &&
+                        _resurfaceController.isAnimating) {
+                      scale *= _resurfaceScale.value;
+                    }
+
+                    return Transform.scale(
+                      scale: scale,
+                      child: Opacity(
+                        opacity: opacity,
+                        child: CustomPaint(
+                          size: Size(size, size),
+                          painter: _RingsPainter(
+                            progress: progress,
+                            state: widget.state,
+                            fadeProgress: _fadeController.value,
+                            resurfaceProgress: _resurfaceController.value,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
-            // Time text overlay
-            Text(
-              widget.timeText,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    fontWeight: FontWeight.w300,
-                    letterSpacing: 2.0,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+              // Time text overlay
+              Text(
+                widget.timeText,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontWeight: FontWeight.w300,
+                      letterSpacing: 2.0,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -294,15 +296,33 @@ class _RingsPainter extends CustomPainter {
     final opacity = _getBaseOpacity();
 
     const rings = [
-      (radiusFactor: 0.95, strokeWidth: 3.0, glowWidth: 12.0, glowBlur: 12.0, glowAlpha: 0.28),
-      (radiusFactor: 0.72, strokeWidth: 2.2, glowWidth: 9.0, glowBlur: 10.0, glowAlpha: 0.22),
-      (radiusFactor: 0.48, strokeWidth: 1.4, glowWidth: 7.0, glowBlur: 8.0, glowAlpha: 0.18),
+      (
+        radiusFactor: 0.95,
+        strokeWidth: 3.0,
+        glowWidth: 12.0,
+        glowBlur: 12.0,
+        glowAlpha: 0.28
+      ),
+      (
+        radiusFactor: 0.72,
+        strokeWidth: 2.2,
+        glowWidth: 9.0,
+        glowBlur: 10.0,
+        glowAlpha: 0.22
+      ),
+      (
+        radiusFactor: 0.48,
+        strokeWidth: 1.4,
+        glowWidth: 7.0,
+        glowBlur: 8.0,
+        glowAlpha: 0.18
+      ),
     ];
 
     for (var i = 0; i < rings.length; i++) {
       final ring = rings[i];
       final radius = baseRadius * ring.radiusFactor;
-      
+
       // Draw glow for critical/completed state with per-ring intensity
       if (state == TimerState.critical || state == TimerState.completed) {
         final glowColor = Color.lerp(
@@ -312,7 +332,7 @@ class _RingsPainter extends CustomPainter {
         )!;
         final glowPaint = Paint()
           ..color = glowColor.withValues(
-            alpha: (ring.glowAlpha * opacity * 255).clamp(0.0, 255.0).roundToDouble(),
+            alpha: (ring.glowAlpha * opacity).clamp(0.0, 1.0),
           )
           ..strokeWidth = ring.glowWidth
           ..style = PaintingStyle.stroke
@@ -320,7 +340,7 @@ class _RingsPainter extends CustomPainter {
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, ring.glowBlur);
         canvas.drawCircle(center, radius, glowPaint);
       }
-      
+
       final baseColor = Color.lerp(
         Colors.grey[600],
         Colors.white,
@@ -328,7 +348,7 @@ class _RingsPainter extends CustomPainter {
       )!;
       final paint = Paint()
         ..color = baseColor.withValues(
-          alpha: (opacity * (0.42 + i * 0.12) * 255).clamp(0.0, 255.0).roundToDouble(),
+          alpha: (opacity * (0.42 + i * 0.12)).clamp(0.0, 1.0),
         )
         ..strokeWidth = ring.strokeWidth
         ..style = PaintingStyle.stroke
@@ -344,7 +364,7 @@ class _RingsPainter extends CustomPainter {
     if (progress > 0 && progressVisibility > 0.0) {
       final outerRadius = baseRadius * rings.first.radiusFactor;
       final progressColor = _getProgressColor().withValues(
-        alpha: (0.95 * opacity * progressVisibility * 255).roundToDouble(),
+        alpha: (0.95 * opacity * progressVisibility).clamp(0.0, 1.0),
       );
       final progressPaint = Paint()
         ..color = progressColor
@@ -373,7 +393,9 @@ class _RingsPainter extends CustomPainter {
       canvas.drawCircle(
         indicator,
         5.8,
-        Paint()..color = progressColor.withValues(alpha: (0.6 * progressVisibility * 255).roundToDouble()),
+        Paint()
+          ..color = progressColor.withValues(
+              alpha: (0.6 * progressVisibility).clamp(0.0, 1.0)),
       );
       canvas.drawCircle(
         indicator,

@@ -3,6 +3,9 @@ enum AppLocale { ru, en }
 class S {
   const S(this.locale);
 
+  /// Для сервисов, которые знают только флаг языка.
+  factory S.forRu(bool isRu) => S(isRu ? AppLocale.ru : AppLocale.en);
+
   final AppLocale locale;
 
   bool get isRu => locale == AppLocale.ru;
@@ -16,13 +19,11 @@ class S {
   String get themeNeon => isRu ? 'Неоновая' : 'Neon';
   String get notifications => isRu ? 'Уведомления' : 'Notifications';
   String get sound => isRu ? 'Звук' : 'Sound';
-  String get soundDescription => isRu
-      ? 'Звук при уведомлениях'
-      : 'Notification sound';
+  String get soundDescription =>
+      isRu ? 'Звук при уведомлениях' : 'Notification sound';
   String get vibration => isRu ? 'Вибрация' : 'Vibration';
-  String get vibrationDescription => isRu
-      ? 'Вибрация при окончании'
-      : 'Vibration for timer completion';
+  String get vibrationDescription =>
+      isRu ? 'Вибрация при окончании' : 'Vibration for timer completion';
   String get russian => 'Русский';
   String get english => 'English';
 
@@ -38,8 +39,8 @@ class S {
 
   String get analytics => isRu ? 'Статистика' : 'Analytics';
   String get notificationsHint => isRu
-      ? 'Уведомления: 50%, 10 сек до конца и завершение таймера.'
-      : 'Notifications: 50%, 10 sec left, and timer done.';
+      ? 'Уведомление придёт, когда таймер завершится.'
+      : 'You will be notified when the timer finishes.';
   String get analyticsEmpty => isRu
       ? 'Здесь появится история, когда таймер дойдёт до нуля.'
       : 'History appears here after a timer reaches zero.';
@@ -47,4 +48,35 @@ class S {
 
   String streakDays(int days) =>
       isRu ? 'Серия: $days дн. подряд' : 'Streak: $days days';
+
+  String get activityTimeline => isRu ? 'Активность' : 'Activity timeline';
+
+  // Уведомления
+  String get timerDoneTitle => isRu ? 'Таймер завершён' : 'Timer finished';
+  String get timerDoneBody => isRu ? 'Время вышло' : 'Time is up';
+  String get timerDoneScheduledBody => isRu
+      ? 'Время вышло — нажмите для нового запуска'
+      : 'Time is up — tap to start again';
+  String get badgeNotificationTitle => isRu ? 'Новый значок!' : 'New badge!';
+  String badgeNotificationBody(int count) => isRu
+      ? 'Вы завершили таймер $count раз'
+      : 'You completed the timer $count times';
+
+  // Достижения
+  String get achievementRecordTitle =>
+      isRu ? '🔥 Новый рекорд!' : '🔥 New record!';
+  String get achievementStreakTitle => isRu ? '🔗 Серия дней!' : '🔗 Streak!';
+  String achievementStreakBody(int days) => isRu
+      ? '${streakDays(days)}. Держи темп'
+      : 'Streak of $days days! Keep it up';
+  String get achievementComebackTitle =>
+      isRu ? '👋 С возвращением!' : '👋 Welcome back!';
+  String get achievementComebackBody => isRu
+      ? 'Рады снова видеть. Начнём новую серию?'
+      : 'Good to see you again. Start a new streak?';
+
+  // Подписи кнопок меню (Semantics / tooltip)
+  String get openMenu => isRu ? 'Меню' : 'Menu';
+  String get startTimerHint => isRu ? 'Запустить таймер' : 'Start timer';
+  String get resetTimerHint => isRu ? 'Сбросить таймер' : 'Reset timer';
 }

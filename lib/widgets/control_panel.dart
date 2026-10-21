@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/strings.dart';
 import '../services/notification_prefs.dart';
+import '../services/timer_prefs.dart';
 import '../theme_manager.dart';
 import '../ui/layout.dart';
 
@@ -86,7 +87,10 @@ class _ControlPanelState extends State<ControlPanel>
             width: 36 * scale,
             height: 4 * scale,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 46),
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -97,7 +101,7 @@ class _ControlPanelState extends State<ControlPanel>
             indicatorColor: Theme.of(context).colorScheme.primary,
             labelColor: Theme.of(context).colorScheme.primary,
             unselectedLabelColor:
-                Theme.of(context).colorScheme.onSurface.withValues(alpha: 140),
+                Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
             tabs: [
               Tab(text: s.timer.toLowerCase()),
               Tab(text: s.settings.toLowerCase()),
@@ -169,7 +173,10 @@ class _TimerTabContent extends StatelessWidget {
             style: TextStyle(
               fontSize: 13 * scale,
               fontWeight: FontWeight.w400,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 148),
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.58),
               letterSpacing: 0.3,
             ),
           ),
@@ -179,7 +186,9 @@ class _TimerTabContent extends StatelessWidget {
             spacing: 10 * scale,
             runSpacing: 10 * scale,
             children: [
-              for (final preset in [1, 2, 3, 4, 5])
+              for (var preset = TimerPrefs.minMinutes;
+                  preset <= TimerPrefs.maxMinutes;
+                  preset++)
                 _PresetButton(
                   minutes: preset,
                   selected: initialMinutes == preset,
@@ -195,7 +204,7 @@ class _TimerTabContent extends StatelessWidget {
               _SheetIconButton(
                 icon: Icons.remove,
                 onTap: () => onMinutesChanged(
-                  (initialMinutes - 1).clamp(1, 5),
+                  TimerPrefs.clampMinutes(initialMinutes - 1),
                 ),
               ),
               SizedBox(width: 28 * scale),
@@ -206,7 +215,10 @@ class _TimerTabContent extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 40 * scale,
                     fontWeight: FontWeight.w300,
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 230),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.9),
                   ),
                 ),
               ),
@@ -214,7 +226,7 @@ class _TimerTabContent extends StatelessWidget {
               _SheetIconButton(
                 icon: Icons.add,
                 onTap: () => onMinutesChanged(
-                  (initialMinutes + 1).clamp(1, 5),
+                  TimerPrefs.clampMinutes(initialMinutes + 1),
                 ),
               ),
             ],
@@ -226,13 +238,17 @@ class _TimerTabContent extends StatelessWidget {
               thumbShape: RoundSliderThumbShape(enabledThumbRadius: 8 * scale),
               overlayShape: RoundSliderOverlayShape(overlayRadius: 16 * scale),
               activeTrackColor: Theme.of(context).colorScheme.primary,
-              inactiveTrackColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 41),
+              inactiveTrackColor: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.16),
               thumbColor: Theme.of(context).colorScheme.primary,
             ),
             child: Slider(
               value: initialMinutes.toDouble(),
-              min: 1,
-              max: 5,
+              min: TimerPrefs.minMinutes.toDouble(),
+              max: TimerPrefs.maxMinutes.toDouble(),
+              divisions: TimerPrefs.maxMinutes - TimerPrefs.minMinutes,
               onChanged: (v) => onMinutesChanged(v.round()),
             ),
           ),
@@ -244,16 +260,16 @@ class _TimerTabContent extends StatelessWidget {
                 backgroundColor: Theme.of(context)
                     .colorScheme
                     .primary
-                    .withValues(alpha: 46),
-                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    .withValues(alpha: 0.18),
+                foregroundColor: Theme.of(context).colorScheme.primary,
                 disabledBackgroundColor: Theme.of(context)
                     .colorScheme
                     .onSurface
-                    .withValues(alpha: 20),
+                    .withValues(alpha: 0.08),
                 disabledForegroundColor: Theme.of(context)
                     .colorScheme
                     .onSurface
-                    .withValues(alpha: 114),
+                    .withValues(alpha: 0.45),
                 padding: EdgeInsets.symmetric(vertical: 14 * scale),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14 * scale),
@@ -376,7 +392,8 @@ class _SectionLabel extends StatelessWidget {
         style: TextStyle(
           fontSize: 11 * scale,
           fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 140),
+          color:
+              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
           letterSpacing: 0.8,
         ),
       ),
@@ -414,7 +431,10 @@ class _LocaleTile extends StatelessWidget {
               else
                 Icon(
                   Icons.radio_button_unchecked,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 102),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.4),
                 ),
             ],
           ),
@@ -456,10 +476,15 @@ class _ThemeTile extends StatelessWidget {
                 ),
               ),
               Icon(
-                selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
                 color: selected
                     ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 102),
+                    : Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.4),
               ),
             ],
           ),

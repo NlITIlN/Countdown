@@ -5,12 +5,16 @@ class ExpandableCornerMenu extends StatefulWidget {
     super.key,
     required this.size,
     required this.tooltip,
+    required this.analyticsLabel,
+    required this.settingsLabel,
     required this.onAnalytics,
     required this.onSettings,
   });
 
   final double size;
   final String tooltip;
+  final String analyticsLabel;
+  final String settingsLabel;
   final VoidCallback onAnalytics;
   final VoidCallback onSettings;
 
@@ -82,21 +86,23 @@ class _ExpandableCornerMenuState extends State<ExpandableCornerMenu>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Transform.translate(
-                      offset: Offset(-widget.size * 1.8 * (1 - _animation.value), 0),
+                      offset: Offset(
+                          -widget.size * 1.8 * (1 - _animation.value), 0),
                       child: _actionButton(
                         context,
                         icon: Icons.bar_chart,
-                        label: 'analytics',
+                        label: widget.analyticsLabel,
                         onTap: () => _select(widget.onAnalytics),
                       ),
                     ),
                     SizedBox(width: spacing),
                     Transform.translate(
-                      offset: Offset(-widget.size * 0.9 * (1 - _animation.value), 0),
+                      offset: Offset(
+                          -widget.size * 0.9 * (1 - _animation.value), 0),
                       child: _actionButton(
                         context,
                         icon: Icons.settings_outlined,
-                        label: 'settings',
+                        label: widget.settingsLabel,
                         onTap: () => _select(widget.onSettings),
                       ),
                     ),
@@ -105,7 +111,8 @@ class _ExpandableCornerMenuState extends State<ExpandableCornerMenu>
               ),
             ),
             IgnorePointer(
-              ignoring: _open, // <-- блокируем клики по главной кнопке, если меню открыто
+              ignoring:
+                  _open, // <-- блокируем клики по главной кнопке, если меню открыто
               child: FadeTransition(
                 opacity: ReverseAnimation(_animation),
                 child: _mainButton(context, iconSize),
@@ -143,17 +150,21 @@ class _ExpandableCornerMenuState extends State<ExpandableCornerMenu>
     required VoidCallback onTap,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: Material(
-        color: colorScheme.surfaceContainerHighest,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: Center(
-            child: Icon(icon, size: widget.size * 0.45, color: colorScheme.primary),
+    return Tooltip(
+      message: label,
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Material(
+          color: colorScheme.surfaceContainerHighest,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: Center(
+              child: Icon(icon,
+                  size: widget.size * 0.45, color: colorScheme.primary),
+            ),
           ),
         ),
       ),
