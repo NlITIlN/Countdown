@@ -3,13 +3,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../l10n/strings.dart';
+import '../l10n/strings_plurals.dart';
 import '../models/usage_stats.dart';
 import '../services/notification_prefs.dart';
 import '../services/notification_service.dart';
 import '../services/timer_prefs.dart';
 import '../services/usage_store.dart';
 
-enum TimerState { idle, press, running, critical, completed }
+enum TimerState { idle, running, critical, completed }
 
 class HomeTimerController extends ChangeNotifier {
   HomeTimerController({
@@ -18,6 +20,7 @@ class HomeTimerController extends ChangeNotifier {
     required this.notifications,
     required this.notificationPrefs,
     required this.localeIsRu,
+    this.completionHold = const Duration(seconds: 3),
   });
 
   final TimerPrefs timerPrefs;
@@ -26,18 +29,27 @@ class HomeTimerController extends ChangeNotifier {
   final NotificationPrefs notificationPrefs;
   final bool Function() localeIsRu;
 
-  int totalSeconds = 5 * 60;
-  int remainingSeconds = 5 * 60;
+  /// Сколько держится состояние completed перед возвратом в idle.
+  final Duration completionHold;
+
+  /// Последние секунды, когда кольца пульсируют.
+  static const _criticalSeconds = 10;
+
+  int totalSeconds = TimerPrefs.defaultMinutes * 60;
+  int remainingSeconds = TimerPrefs.defaultMinutes * 60;
   bool running = false;
   bool ready = false;
   TimerState currentState = TimerState.idle;
 
   Timer? _ticker;
+  Timer? _idleTimer;
+
+  /// Защита от повторного завершения (тикер и resume могут сработать одновременно).
+  bool _completing = false;
 
   bool get canEdit => !running;
-  double get progress => totalSeconds == 0 || !running
-      ? 0
-      : remainingSeconds / totalSeconds;
+  double get progress =>
+      totalSeconds == 0 || !running ? 0 : remainingSeconds / totalSeconds;
 
   String get timeText {
     final seconds = remainingSeconds;
@@ -82,6 +94,11 @@ class HomeTimerController extends ChangeNotifier {
       totalSeconds = total;
       remainingSeconds = active ? remaining : total;
       running = active;
+      currentState = !active
+          ? TimerState.idle
+          : remaining < _criticalSeconds
+              ? TimerState.critical
+              : TimerState.running;
       ready = true;
       _notifyUpdate();
 
@@ -102,8 +119,8 @@ class HomeTimerController extends ChangeNotifier {
       if (kDebugMode) {
         debugPrint('bootstrap failed: $e\n$st');
       }
-      totalSeconds = 5 * 60;
-      remainingSeconds = 5 * 60;
+      totalSeconds = TimerPrefs.defaultMinutes * 60;
+      remainingSeconds = TimerPrefs.defaultMinutes * 60;
       running = false;
       ready = true;
       _notifyUpdate();
@@ -112,7 +129,7 @@ class HomeTimerController extends ChangeNotifier {
 
   Future<void> setMinutes(int minutes) async {
     if (!canEdit) return;
-    final clamped = minutes.clamp(1, 24 * 60);
+    final clamped = TimerPrefs.clampMinutes(minutes);
     final seconds = clamped * 60;
     await timerPrefs.saveMinutes(clamped);
     totalSeconds = seconds;
@@ -121,7 +138,8 @@ class HomeTimerController extends ChangeNotifier {
   }
 
   Future<void> start() async {
-    final seconds = remainingSeconds.clamp(1, 24 * 60 * 60);
+    _idleTimer?.cancel();
+    final seconds = remainingSeconds.clamp(1, TimerPrefs.maxMinutes * 60);
     final endsAt = DateTime.now().add(Duration(seconds: seconds));
     await timerPrefs.saveEndsAt(endsAt);
 
@@ -140,12 +158,13 @@ class HomeTimerController extends ChangeNotifier {
 
   void _startTicker() {
     _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => syncFromClock());
+    _ticker =
+        Timer.periodic(const Duration(seconds: 1), (_) => syncFromClock());
   }
 
   Future<void> syncFromClock() async {
     final endsAt = timerPrefs.loadEndsAt();
-    if (!running || endsAt == null) return;
+    if (!running || _completing || endsAt == null) return;
 
     final left = endsAt.difference(DateTime.now()).inSeconds;
     if (left <= 0) {
@@ -154,21 +173,13 @@ class HomeTimerController extends ChangeNotifier {
     }
 
     remainingSeconds = left;
-    
+
     // Update state based on remaining time
-    if (left < 10) {
+    if (left < _criticalSeconds) {
       _setState(TimerState.critical);
     } else if (running) {
       _setState(TimerState.running);
     }
-  }
-
-  Future<void> pause() async {
-    _ticker?.cancel();
-    await notifications.cancelSteps();
-    await timerPrefs.clearEndsAt();
-    running = false;
-    _setState(TimerState.idle);
   }
 
   Future<void> reset() async {
@@ -181,37 +192,46 @@ class HomeTimerController extends ChangeNotifier {
   }
 
   Future<void> handleCompletion({required bool notify}) async {
-    _ticker?.cancel();
-    await notifications.cancelSteps();
-    await timerPrefs.clearEndsAt();
+    if (_completing) return;
+    _completing = true;
+    try {
+      _ticker?.cancel();
+      await notifications.cancelSteps();
+      await timerPrefs.clearEndsAt();
 
-    final before = await usageStore.loadStats();
-    await usageStore.recordCompletion();
-    final after = await usageStore.loadStats();
+      final before = await usageStore.loadStats();
+      await usageStore.recordCompletion();
+      final after = await usageStore.loadStats();
 
-    _setState(TimerState.completed);
+      running = false;
+      remainingSeconds = totalSeconds;
+      _setState(TimerState.completed);
 
-    if (notify) {
-      if (notificationPrefs.vibrationEnabled()) {
-        HapticFeedback.heavyImpact();
+      // Возврат в idle после анимации — только если за это время не запустили новый таймер.
+      _idleTimer?.cancel();
+      _idleTimer = Timer(completionHold, () {
+        if (currentState == TimerState.completed) _setState(TimerState.idle);
+      });
+
+      if (notify) {
+        if (notificationPrefs.vibrationEnabled()) {
+          HapticFeedback.heavyImpact();
+        }
+        await notifications.showDone(
+          isRu: localeIsRu(),
+          playSound: notificationPrefs.soundEnabled(),
+          vibrate: notificationPrefs.vibrationEnabled(),
+        );
       }
-      await notifications.showDone(
-        isRu: localeIsRu(),
-        playSound: notificationPrefs.soundEnabled(),
-        vibrate: notificationPrefs.vibrationEnabled(),
-      );
+      await _notifyMilestones(before, after, localeIsRu());
+    } finally {
+      _completing = false;
     }
-    await _notifyMilestones(before, after, localeIsRu());
-
-    running = false;
-    remainingSeconds = totalSeconds;
-    
-    // Emit completed state, then transition back to idle after animation
-    await Future.delayed(const Duration(seconds: 3));
-    _setState(TimerState.idle);
   }
 
-  Future<void> _notifyMilestones(UsageStats before, UsageStats after, bool isRu) async {
+  /// За одно завершение — максимум одна награда: значок важнее достижения.
+  Future<void> _notifyMilestones(
+      UsageStats before, UsageStats after, bool isRu) async {
     for (final milestone in [10, 25, 50, 100]) {
       if (before.totalCount < milestone && after.totalCount >= milestone) {
         await notifications.showBadge(
@@ -220,79 +240,80 @@ class HomeTimerController extends ChangeNotifier {
           playSound: notificationPrefs.soundEnabled(),
           vibrate: notificationPrefs.vibrationEnabled(),
         );
-        break;
+        return;
       }
     }
-    
-    // Проверить достижения
+
     await _checkAchievements(before, after, isRu);
   }
 
-  Future<void> _checkAchievements(UsageStats before, UsageStats after, bool isRu) async {
-    final prefs = notificationPrefs;
-    
-    // 1. Новый рекорд дня
+  /// Каждый тип достижения показывается не чаще раза в день, за раз — только одно.
+  Future<void> _checkAchievements(
+      UsageStats before, UsageStats after, bool isRu) async {
+    final s = S.forRu(isRu);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final todayCount = after.getTodayCount();
-    if (todayCount > 0 && before.getMaxDayCount() < todayCount) {
-      final prevMax = before.getMaxDayCount();
-      final title = isRu ? '🔥 Новый рекорд!' : '🔥 New record!';
-      final body = isRu
-          ? '$todayCount сеансов (было $prevMax)'
-          : '$todayCount sessions (was $prevMax)';
-      final key = 'record_$todayCount';
-      // Дедупликация: не показываем повторное то же достижение
-      if (prefs.lastAchievementKey() == key) return;
-      await notifications.showAchievement(
-        title: title,
-        body: body,
-        playSound: prefs.soundEnabled(),
-        vibrate: prefs.vibrationEnabled(),
-      );
-      await prefs.saveLastAchievement(key);
-      return; // Показываем только одно достижение за раз
+
+    // 1. Рекорд дня: сегодня больше, чем лучший из прошлых дней (первый запуск — не рекорд).
+    final prevBest = after.days
+        .where((d) => d.date != today)
+        .fold<int>(0, (best, d) => d.count > best ? d.count : best);
+    if (prevBest > 0 && todayCount > prevBest) {
+      if (await _showAchievementOnce(
+        'record',
+        title: s.achievementRecordTitle,
+        body: s.achievementRecordBody(todayCount, prevBest),
+      )) {
+        return;
+      }
     }
-    
-    // 2. Рост активности (>20%)
-    final yesterdayCount = after.getYesterdayCount();
-    if (yesterdayCount > 0 && todayCount > yesterdayCount * 1.2) {
-      final title = isRu ? '✨ Отличный прогресс!' : '✨ Great progress!';
-      final increase = ((todayCount - yesterdayCount) / yesterdayCount * 100).toInt();
-      final body = isRu
-          ? '+$increase% к вчера'
-          : '+$increase% vs yesterday';
-      final key = 'progress_$increase';
-      if (prefs.lastAchievementKey() == key) return;
-      await notifications.showAchievement(
-        title: title,
-        body: body,
-        playSound: prefs.soundEnabled(),
-        vibrate: prefs.vibrationEnabled(),
-      );
-      await prefs.saveLastAchievement(key);
-      return;
+
+    // 2. Серия от 3 дней — когда серия выросла.
+    if (after.streakDays >= 3 && after.streakDays > before.streakDays) {
+      if (await _showAchievementOnce(
+        'streak',
+        title: s.achievementStreakTitle,
+        body: s.achievementStreakBody(after.streakDays),
+      )) {
+        return;
+      }
     }
-    
-    // 3. Серия дней (N дней подряд)
-    if (after.streakDays >= 3 && before.streakDays < after.streakDays) {
-      final title = isRu ? '🔗 Серия дней!' : '🔗 Streak!';
-      final body = isRu
-          ? 'Серия ${after.streakDays} дней! Держи темп'
-          : 'Streak of ${after.streakDays} days! Keep it up';
-      final key = 'streak_${after.streakDays}';
-      if (prefs.lastAchievementKey() == key) return;
-      await notifications.showAchievement(
-        title: title,
-        body: body,
-        playSound: prefs.soundEnabled(),
-        vibrate: prefs.vibrationEnabled(),
-      );
-      await prefs.saveLastAchievement(key);
+
+    // 3. Возвращение: первый запуск после перерыва 3+ дня.
+    if (todayCount == 1 && before.days.isNotEmpty) {
+      final lastActive = before.days.first.date;
+      if (today.difference(lastActive).inDays > 3) {
+        await _showAchievementOnce(
+          'comeback',
+          title: s.achievementComebackTitle,
+          body: s.achievementComebackBody,
+        );
+      }
     }
+  }
+
+  Future<bool> _showAchievementOnce(
+    String type, {
+    required String title,
+    required String body,
+  }) async {
+    final prefs = notificationPrefs;
+    if (prefs.achievementShownToday(type)) return false;
+    await notifications.showAchievement(
+      title: title,
+      body: body,
+      playSound: prefs.soundEnabled(),
+      vibrate: prefs.vibrationEnabled(),
+    );
+    await prefs.markAchievementShown(type);
+    return true;
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
+    _idleTimer?.cancel();
     super.dispose();
   }
 }

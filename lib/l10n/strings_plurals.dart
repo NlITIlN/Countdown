@@ -12,6 +12,13 @@ extension PluralExtensions on S {
     return 'запусков';
   }
 
+  String achievementRecordBody(int today, int previousBest) => isRu
+      ? '$today ${sessionsLabel(today)} за день (было $previousBest)'
+      : '$today ${sessionsLabel(today)} in a day (was $previousBest)';
+
+  String dayActivity(String day, int count) =>
+      '$day: $count ${sessionsLabel(count)}';
+
   String timesOnDay(int count) {
     if (!isRu) return '$count×';
     if (count % 10 == 1 && count % 100 != 11) return '$count раз';

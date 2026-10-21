@@ -132,6 +132,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         timeText: _timeText,
                         progress: _progress,
                         state: _timerController.currentState,
+                        semanticsHint: _timerController.running
+                            ? s.resetTimerHint
+                            : s.startTimerHint,
                         onTap: _onCircleTap,
                         onLongPress: () {
                           // Long press placeholder for future gestures
@@ -143,12 +146,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       right: 0,
                       child: ExpandableCornerMenu(
                         size: m.cornerButtonSize,
-                        tooltip: s.settings,
+                        tooltip: s.openMenu,
+                        analyticsLabel: s.analytics,
+                        settingsLabel: s.settings,
                         onAnalytics: () async {
                           await Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (ctx) => Scaffold(
-                                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                                backgroundColor:
+                                    Theme.of(context).scaffoldBackgroundColor,
                                 appBar: AppBar(
                                   backgroundColor: Colors.transparent,
                                   elevation: 0,
@@ -169,7 +175,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           await Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (ctx) => Scaffold(
-                                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                                backgroundColor:
+                                    Theme.of(context).scaffoldBackgroundColor,
                                 appBar: AppBar(
                                   backgroundColor: Colors.transparent,
                                   elevation: 0,
@@ -182,7 +189,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     running: _timerController.running,
                                     notificationPrefs: widget.notificationPrefs,
                                     onTimerApply: (value) async {
-                                      if (value != minutes) await _setMinutes(value);
+                                      if (value != minutes) {
+                                        await _setMinutes(value);
+                                      }
                                     },
                                     onLocaleChanged: widget.onLocaleChanged,
                                     themeMode: widget.themeMode,
@@ -210,5 +219,3 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 }
-
-

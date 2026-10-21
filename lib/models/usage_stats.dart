@@ -20,8 +20,11 @@ class UsageStats {
     badgeKey: 'none',
   );
 
-  factory UsageStats.fromTimestamps(List<DateTime> events) {
-    if (events.isEmpty) return UsageStats.empty;
+  /// [totalCount] — полный счётчик за всё время; по умолчанию равен числу событий
+  /// (событий хранится ограниченное количество, счётчик — нет).
+  factory UsageStats.fromTimestamps(List<DateTime> events, {int? totalCount}) {
+    final total = totalCount ?? events.length;
+    if (events.isEmpty && total == 0) return UsageStats.empty;
 
     final byDay = <DateTime, int>{};
     for (final event in events) {
@@ -35,10 +38,10 @@ class UsageStats {
       ..sort((a, b) => b.date.compareTo(a.date));
 
     return UsageStats(
-      totalCount: events.length,
+      totalCount: total,
       days: days,
       streakDays: _streakDays(byDay.keys.toList()..sort()),
-      badgeKey: _badgeFor(events.length),
+      badgeKey: _badgeFor(total),
     );
   }
 
@@ -80,21 +83,26 @@ class UsageStats {
   int getTodayCount() {
     if (days.isEmpty) return 0;
     final today = _today();
-    return days.firstWhere(
-      (d) => d.date.compareTo(today) == 0,
-      orElse: () => DayUsage(date: DateTime.fromMillisecondsSinceEpoch(0), count: 0),
-    ).count;
+    return days
+        .firstWhere(
+          (d) => d.date.compareTo(today) == 0,
+          orElse: () =>
+              DayUsage(date: DateTime.fromMillisecondsSinceEpoch(0), count: 0),
+        )
+        .count;
   }
 
   /// Получить количество сеансов вчера
   int getYesterdayCount() {
     if (days.isEmpty) return 0;
     final yesterday = _today().subtract(const Duration(days: 1));
-    return days.firstWhere(
-      (d) => d.date.compareTo(yesterday) == 0,
-      orElse: () => DayUsage(date: DateTime.fromMillisecondsSinceEpoch(0), count: 0),
-    ).count;
-
+    return days
+        .firstWhere(
+          (d) => d.date.compareTo(yesterday) == 0,
+          orElse: () =>
+              DayUsage(date: DateTime.fromMillisecondsSinceEpoch(0), count: 0),
+        )
+        .count;
   }
 
   /// Получить максимальное количество сеансов в любой день
@@ -102,5 +110,4 @@ class UsageStats {
     if (days.isEmpty) return 0;
     return days.map((d) => d.count).reduce((a, b) => a > b ? a : b);
   }
-
 }

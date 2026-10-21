@@ -20,25 +20,20 @@ class NotificationPrefs {
     await _prefs.setBool(_vibrateKey, enabled);
   }
 
-  // Achievement dedupe keys
-  static const _lastAchievementKey = 'notification_last_achievement_key';
-  static const _lastAchievementAt = 'notification_last_achievement_at';
+  // Achievement dedupe: each type is shown at most once per day.
+  static const _achievementDayPrefix = 'notification_achievement_day_';
 
-  String? lastAchievementKey() => _prefs.getString(_lastAchievementKey);
+  bool achievementShownToday(String type) =>
+      _prefs.getString('$_achievementDayPrefix$type') ==
+      _dayKey(DateTime.now());
 
-  DateTime? lastAchievementAt() {
-    final ms = _prefs.getInt(_lastAchievementAt);
-    if (ms == null) return null;
-    return DateTime.fromMillisecondsSinceEpoch(ms);
+  Future<void> markAchievementShown(String type) async {
+    await _prefs.setString(
+      '$_achievementDayPrefix$type',
+      _dayKey(DateTime.now()),
+    );
   }
 
-  Future<void> saveLastAchievement(String key) async {
-    await _prefs.setString(_lastAchievementKey, key);
-    await _prefs.setInt(_lastAchievementAt, DateTime.now().millisecondsSinceEpoch);
-  }
-
-  Future<void> clearLastAchievement() async {
-    await _prefs.remove(_lastAchievementKey);
-    await _prefs.remove(_lastAchievementAt);
-  }
+  static String _dayKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }

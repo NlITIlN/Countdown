@@ -6,9 +6,22 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../l10n/strings.dart';
+
 class MobileNotificationHandler {
-  static const _channelId = 'countdown_steps';
-  static const _channelName = 'Timer';
+  /// Канал из первых версий: на Android 8+ звук и вибрацию задаёт канал,
+  /// поэтому вместо одного канала — по каналу на каждое сочетание настроек.
+  static const _legacyChannelId = 'countdown_steps';
+
+  static String _channelId({required bool playSound, required bool vibrate}) =>
+      'countdown_timer_${playSound ? 'sound' : 'nosound'}_${vibrate ? 'vibrate' : 'novibrate'}';
+
+  static String _channelName({required bool playSound, required bool vibrate}) {
+    if (playSound && vibrate) return 'Timer: sound + vibration';
+    if (playSound) return 'Timer: sound only';
+    if (vibrate) return 'Timer: vibration only';
+    return 'Timer: silent';
+  }
 
   static const idDone = 100;
   static const idHalf = 101;
@@ -19,6 +32,10 @@ class MobileNotificationHandler {
       FlutterLocalNotificationsPlugin();
 
   bool _ready = false;
+
+  AndroidFlutterLocalNotificationsPlugin? get _android =>
+      _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
 
   static bool get isMobile {
     if (kIsWeb) return false;
@@ -48,17 +65,24 @@ class MobileNotificationHandler {
         const InitializationSettings(android: android, iOS: ios),
       );
 
-      const channel = AndroidNotificationChannel(
-        _channelId,
-        _channelName,
-        description: 'Timer milestones and completion',
-        importance: Importance.high,
-      );
-
-      await _plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(channel);
+      final androidPlugin = _android;
+      if (androidPlugin != null) {
+        await androidPlugin.deleteNotificationChannel(_legacyChannelId);
+        for (final playSound in [true, false]) {
+          for (final vibrate in [true, false]) {
+            await androidPlugin.createNotificationChannel(
+              AndroidNotificationChannel(
+                _channelId(playSound: playSound, vibrate: vibrate),
+                _channelName(playSound: playSound, vibrate: vibrate),
+                description: 'Timer completion and achievements',
+                importance: Importance.high,
+                playSound: playSound,
+                enableVibration: vibrate,
+              ),
+            );
+          }
+        }
+      }
 
       _ready = true;
     } catch (e, st) {
@@ -71,10 +95,7 @@ class MobileNotificationHandler {
 
     try {
       if (Platform.isAndroid) {
-        await _plugin
-            .resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin>()
-            ?.requestNotificationsPermission();
+        await _android?.requestNotificationsPermission();
       } else if (Platform.isIOS) {
         await _plugin
             .resolvePlatformSpecificImplementation<
@@ -99,37 +120,11 @@ class MobileNotificationHandler {
       await _scheduleNative(
         id: idDone,
         at: endsAt,
-        title: isRu ? 'Таймер завершён' : 'Timer finished',
-        body: isRu
-            ? 'Время вышло — нажмите для нового запуска'
-            : 'Time is up — tap to start again',
+        title: S.forRu(isRu).timerDoneTitle,
+        body: S.forRu(isRu).timerDoneScheduledBody,
         playSound: playSound,
         vibrate: vibrate,
       );
-
-      if (totalSeconds >= 120) {
-        final halfAt = endsAt.subtract(Duration(seconds: totalSeconds ~/ 2));
-        if (halfAt.isAfter(DateTime.now())) {
-          await _scheduleNative(
-            id: idHalf,
-            at: halfAt,
-            title: isRu ? 'Половина пути' : 'Halfway there',
-            body: isRu ? 'Осталось 50% времени' : '50% of time remaining',
-          );
-        }
-      }
-
-      if (totalSeconds > 15) {
-        final tenAt = endsAt.subtract(const Duration(seconds: 10));
-        if (tenAt.isAfter(DateTime.now())) {
-          await _scheduleNative(
-            id: idTenSec,
-            at: tenAt,
-            title: isRu ? '10 секунд' : '10 seconds',
-            body: isRu ? 'Скоро окончание таймера' : 'Timer ending soon',
-          );
-        }
-      }
     } catch (e) {
       debugPrint('scheduleSteps failed: $e');
     }
@@ -138,6 +133,7 @@ class MobileNotificationHandler {
   Future<void> cancelSteps() async {
     if (!_ready) return;
     try {
+      // idHalf/idTenSec — уведомления старых версий, могут ещё висеть в расписании.
       for (final id in [idDone, idHalf, idTenSec]) {
         await _plugin.cancel(id);
       }
@@ -176,13 +172,19 @@ class MobileNotificationHandler {
   }) async {
     if (at.isBefore(DateTime.now())) return;
 
+    // Точное время, если система разрешает; иначе — inexact (может опоздать).
+    final exact = Platform.isAndroid &&
+        (await _android?.canScheduleExactNotifications() ?? false);
+
     await _plugin.zonedSchedule(
       id,
       title,
       body,
       tz.TZDateTime.from(at, tz.local),
       _notificationDetails(playSound: playSound, vibrate: vibrate),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      androidScheduleMode: exact
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
@@ -194,8 +196,8 @@ class MobileNotificationHandler {
   }) {
     return NotificationDetails(
       android: AndroidNotificationDetails(
-        _channelId,
-        _channelName,
+        _channelId(playSound: playSound, vibrate: vibrate),
+        _channelName(playSound: playSound, vibrate: vibrate),
         importance: Importance.high,
         priority: Priority.high,
         playSound: playSound,

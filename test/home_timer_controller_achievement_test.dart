@@ -4,97 +4,219 @@ import 'package:countdown/screens/home_timer_controller.dart';
 import 'package:countdown/services/notification_prefs.dart';
 import 'package:countdown/services/notification_service.dart';
 import 'package:countdown/services/timer_prefs.dart';
+import 'package:countdown/services/usage_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:countdown/services/usage_store.dart';
 
 class TestNotificationService extends NotificationService {
   final List<Map<String, String>> achievements = [];
+  final List<int> badges = [];
 
   @override
   Future<void> cancelSteps() async {}
 
   @override
-  Future<void> scheduleSteps({required DateTime endsAt, required int totalSeconds, required bool isRu, bool playSound = true, bool vibrate = true}) async {}
+  Future<void> scheduleSteps(
+      {required DateTime endsAt,
+      required int totalSeconds,
+      required bool isRu,
+      bool playSound = true,
+      bool vibrate = true}) async {}
 
   @override
-  Future<void> showDone({required bool isRu, bool playSound = true, bool vibrate = true}) async {}
+  Future<void> showDone(
+      {required bool isRu, bool playSound = true, bool vibrate = true}) async {}
 
   @override
-  Future<void> showBadge({required int count, required bool isRu, bool playSound = true, bool vibrate = true}) async {}
+  Future<void> showBadge(
+      {required int count,
+      required bool isRu,
+      bool playSound = true,
+      bool vibrate = true}) async {
+    badges.add(count);
+  }
 
   @override
-  Future<void> showAchievement({required String title, required String body, bool playSound = true, bool vibrate = true}) async {
+  Future<void> showAchievement(
+      {required String title,
+      required String body,
+      bool playSound = true,
+      bool vibrate = true}) async {
     achievements.add({'title': title, 'body': body});
   }
 }
 
+/// Отдаёт [before] до записи завершения и [after] — после.
 class TestUsageStore extends UsageStore {
-  UsageStats before;
-  UsageStats after;
-  bool _recorded = false;
+  TestUsageStore(super.prefs, {required this.before, required this.after});
 
-  TestUsageStore(SharedPreferences prefs, {required this.before, required this.after}) : super(prefs);
+  final UsageStats before;
+  final UsageStats after;
+  int recorded = 0;
 
   @override
-  Future<UsageStats> loadStats() async {
-    return _recorded ? after : before;
-  }
+  Future<UsageStats> loadStats() async => recorded > 0 ? after : before;
 
   @override
   Future<void> recordCompletion() async {
-    _recorded = true;
+    // Пауза, чтобы два параллельных завершения успели пересечься.
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    recorded++;
   }
 }
 
-// We'll use real TimerPrefs backed by mocked SharedPreferences in tests.
+DateTime _day(int daysAgo) {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day - daysAgo);
+}
+
+UsageStats _stats(Map<int, int> countsByDaysAgo, {int streak = 1}) {
+  final days = countsByDaysAgo.entries
+      .map((e) => DayUsage(date: _day(e.key), count: e.value))
+      .toList()
+    ..sort((a, b) => b.date.compareTo(a.date));
+  return UsageStats(
+    totalCount: countsByDaysAgo.values.fold(0, (a, b) => a + b),
+    days: days,
+    streakDays: streak,
+    badgeKey: 'starter',
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('shows record achievement and dedupes', () async {
+  late SharedPreferences prefs;
+  late TestNotificationService notifications;
+
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    final notifPrefs = NotificationPrefs(prefs);
+    prefs = await SharedPreferences.getInstance();
+    notifications = TestNotificationService();
+  });
 
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+  HomeTimerController controllerFor(TestUsageStore usage) =>
+      HomeTimerController(
+        timerPrefs: TimerPrefs(prefs),
+        usageStore: usage,
+        notifications: notifications,
+        notificationPrefs: NotificationPrefs(prefs),
+        localeIsRu: () => false,
+        completionHold: const Duration(milliseconds: 20),
+      );
 
-    final before = UsageStats(
-      totalCount: 5,
-      days: [DayUsage(date: today, count: 1)],
-      streakDays: 1,
-      badgeKey: 'starter',
+  test('record achievement shown once per day', () async {
+    final usage = TestUsageStore(
+      prefs,
+      before: _stats({0: 2, 1: 2}, streak: 2),
+      after: _stats({0: 3, 1: 2}, streak: 2),
     );
+    final controller = controllerFor(usage);
 
+    await controller.handleCompletion(notify: true);
+    expect(notifications.achievements, hasLength(1));
+    expect(notifications.achievements.first['title'], contains('New record'));
+
+    // Повторный рекорд в тот же день не показывается.
+    await controller.handleCompletion(notify: true);
+    expect(notifications.achievements, hasLength(1));
+    controller.dispose();
+  });
+
+  test('first ever session is not a record', () async {
+    final usage = TestUsageStore(
+      prefs,
+      before: UsageStats.empty,
+      after: _stats({0: 1}),
+    );
+    final controller = controllerFor(usage);
+
+    await controller.handleCompletion(notify: true);
+    expect(notifications.achievements, isEmpty);
+    controller.dispose();
+  });
+
+  test('streak of 3+ days is announced when it grows', () async {
+    final usage = TestUsageStore(
+      prefs,
+      before: _stats({1: 1, 2: 1}, streak: 2),
+      after: _stats({0: 1, 1: 1, 2: 1}, streak: 3),
+    );
+    final controller = controllerFor(usage);
+
+    await controller.handleCompletion(notify: true);
+    expect(notifications.achievements, hasLength(1));
+    expect(notifications.achievements.first['title'], contains('Streak'));
+    controller.dispose();
+  });
+
+  test('comeback after 3+ day break', () async {
+    final usage = TestUsageStore(
+      prefs,
+      before: _stats({5: 1}),
+      after: _stats({0: 1, 5: 1}),
+    );
+    final controller = controllerFor(usage);
+
+    await controller.handleCompletion(notify: true);
+    expect(notifications.achievements, hasLength(1));
+    expect(notifications.achievements.first['title'], contains('Welcome back'));
+    controller.dispose();
+  });
+
+  test('badge takes priority over achievement', () async {
+    final before = _stats({0: 4, 1: 5});
     final after = UsageStats(
-      totalCount: 6,
-      days: [DayUsage(date: today, count: 3)],
-      streakDays: 1,
-      badgeKey: 'starter',
+      totalCount: 10,
+      days: [
+        DayUsage(date: _day(0), count: 6),
+        DayUsage(date: _day(1), count: 4)
+      ],
+      streakDays: 2,
+      badgeKey: 'rhythm',
     );
-
     final usage = TestUsageStore(prefs, before: before, after: after);
-    final notifications = TestNotificationService();
-    final timerPrefs = TimerPrefs(prefs);
+    final controller = controllerFor(usage);
 
-    final controller = HomeTimerController(
-      timerPrefs: timerPrefs,
-      usageStore: usage as dynamic,
-      notifications: notifications,
-      notificationPrefs: notifPrefs,
-      localeIsRu: () => false,
+    await controller.handleCompletion(notify: true);
+    expect(notifications.badges, [10]);
+    expect(notifications.achievements, isEmpty);
+    controller.dispose();
+  });
+
+  test('concurrent completions are recorded once', () async {
+    final usage = TestUsageStore(
+      prefs,
+      before: UsageStats.empty,
+      after: _stats({0: 1}),
     );
+    final controller = controllerFor(usage);
 
-    // Call handleCompletion which should record completion and show achievement
-    await controller.handleCompletion(notify: true);
+    await Future.wait([
+      controller.handleCompletion(notify: false),
+      controller.handleCompletion(notify: false),
+    ]);
+    expect(usage.recorded, 1);
+    controller.dispose();
+  });
 
-    expect(notifications.achievements, isNotEmpty);
-    final first = notifications.achievements.first['title']!;
-    expect(first.contains('New record'), isTrue);
+  test('completed state returns to idle, but not over a new run', () async {
+    final usage = TestUsageStore(
+      prefs,
+      before: UsageStats.empty,
+      after: _stats({0: 1}),
+    );
+    final controller = controllerFor(usage);
 
-    // Call again; dedupe should prevent duplicate achievement
-    await controller.handleCompletion(notify: true);
-    expect(notifications.achievements.length, equals(1));
+    await controller.handleCompletion(notify: false);
+    expect(controller.currentState, TimerState.completed);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(controller.currentState, TimerState.idle);
+
+    await controller.handleCompletion(notify: false);
+    await controller.start();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(controller.currentState, TimerState.running);
+    controller.dispose();
   });
 }
