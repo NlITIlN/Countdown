@@ -46,9 +46,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   S get s => widget.strings;
 
-  String get _timeText => _timerController.timeText;
-
-  double get _progress => _timerController.progress;
+  /// Экран целиком перестраивается только при смене ready; тики таймера
+  /// слушает одна кнопка с кольцами (см. ListenableBuilder в build).
+  bool _ready = false;
 
   @override
   void initState() {
@@ -60,7 +60,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       notificationPrefs: widget.notificationPrefs,
       localeIsRu: () => widget.strings.isRu,
     );
-    _timerController.addListener(_refresh);
+    _timerController.addListener(_onReadyChanged);
     WidgetsBinding.instance.addObserver(this);
     _timerController.bootstrap();
   }
@@ -88,22 +88,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _timerController.start();
   }
 
-  Future<void> _refresh() async {
-    if (!mounted) return;
-    setState(() {});
+  void _onReadyChanged() {
+    if (!mounted || _timerController.ready == _ready) return;
+    setState(() => _ready = _timerController.ready);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _timerController.removeListener(_refresh);
+    _timerController.removeListener(_onReadyChanged);
     _timerController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_timerController.ready) {
+    if (!_ready) {
       return const Scaffold(
         body: Center(
           child: SizedBox(
@@ -128,17 +128,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   children: [
                     Align(
                       alignment: Alignment.center,
-                      child: RingsTimerButton(
-                        timeText: _timeText,
-                        progress: _progress,
-                        state: _timerController.currentState,
-                        semanticsHint: _timerController.running
-                            ? s.resetTimerHint
-                            : s.startTimerHint,
-                        onTap: _onCircleTap,
-                        onLongPress: () {
-                          // Long press placeholder for future gestures
-                        },
+                      child: ListenableBuilder(
+                        listenable: _timerController,
+                        builder: (context, _) => RingsTimerButton(
+                          timeText: _timerController.timeText,
+                          endsAt: _timerController.endsAt,
+                          totalDuration: _timerController.totalDuration,
+                          state: _timerController.currentState,
+                          semanticsHint: _timerController.running
+                              ? s.resetTimerHint
+                              : s.startTimerHint,
+                          onTap: _onCircleTap,
+                          onLongPress: () {
+                            // Long press placeholder for future gestures
+                          },
+                        ),
                       ),
                     ),
                     Positioned(

@@ -48,8 +48,12 @@ class HomeTimerController extends ChangeNotifier {
   bool _completing = false;
 
   bool get canEdit => !running;
-  double get progress =>
-      totalSeconds == 0 || !running ? 0 : remainingSeconds / totalSeconds;
+
+  /// Время окончания текущего отсчёта (null — таймер не идёт).
+  /// По нему кнопка сама плавно считает прогресс на каждом кадре.
+  DateTime? get endsAt => running ? timerPrefs.loadEndsAt() : null;
+
+  Duration get totalDuration => Duration(seconds: totalSeconds);
 
   String get timeText {
     final seconds = remainingSeconds;

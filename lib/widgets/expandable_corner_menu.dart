@@ -39,9 +39,6 @@ class _ExpandableCornerMenuState extends State<ExpandableCornerMenu>
       parent: _controller,
       curve: Curves.easeOutCubic,
     );
-    _controller.addListener(() {
-      setState(() {});
-    });
   }
 
   @override
@@ -71,6 +68,20 @@ class _ExpandableCornerMenuState extends State<ExpandableCornerMenu>
     final iconSize = widget.size * 0.44;
     final spacing = widget.size * 0.16;
 
+    // Кнопки строятся один раз; на кадрах анимации меняются только сдвиг и прозрачность.
+    final analyticsButton = _actionButton(
+      context,
+      icon: Icons.bar_chart,
+      label: widget.analyticsLabel,
+      onTap: () => _select(widget.onAnalytics),
+    );
+    final settingsButton = _actionButton(
+      context,
+      icon: Icons.settings_outlined,
+      label: widget.settingsLabel,
+      onTap: () => _select(widget.onSettings),
+    );
+
     return Tooltip(
       message: widget.tooltip,
       child: Material(
@@ -80,33 +91,27 @@ class _ExpandableCornerMenuState extends State<ExpandableCornerMenu>
           children: [
             IgnorePointer(
               ignoring: !_open,
-              child: Opacity(
-                opacity: _animation.value,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Transform.translate(
-                      offset: Offset(
-                          -widget.size * 1.8 * (1 - _animation.value), 0),
-                      child: _actionButton(
-                        context,
-                        icon: Icons.bar_chart,
-                        label: widget.analyticsLabel,
-                        onTap: () => _select(widget.onAnalytics),
-                      ),
-                    ),
-                    SizedBox(width: spacing),
-                    Transform.translate(
-                      offset: Offset(
-                          -widget.size * 0.9 * (1 - _animation.value), 0),
-                      child: _actionButton(
-                        context,
-                        icon: Icons.settings_outlined,
-                        label: widget.settingsLabel,
-                        onTap: () => _select(widget.onSettings),
-                      ),
-                    ),
-                  ],
+              child: FadeTransition(
+                opacity: _animation,
+                child: AnimatedBuilder(
+                  animation: _animation,
+                  builder: (context, _) {
+                    final hidden = 1 - _animation.value;
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Transform.translate(
+                          offset: Offset(-widget.size * 1.8 * hidden, 0),
+                          child: analyticsButton,
+                        ),
+                        SizedBox(width: spacing),
+                        Transform.translate(
+                          offset: Offset(-widget.size * 0.9 * hidden, 0),
+                          child: settingsButton,
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),

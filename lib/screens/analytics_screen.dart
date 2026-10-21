@@ -22,6 +22,9 @@ class AnalyticsScreen extends StatefulWidget {
 }
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
+  /// Загружается один раз при открытии экрана, а не на каждую перестройку.
+  late final Future<UsageStats> _statsFuture = widget.usageStore.loadStats();
+
   @override
   Widget build(BuildContext context) {
     final metrics = AppMetrics.of(context);
@@ -67,7 +70,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 children: [
                   SizedBox(height: 20 * scale),
                   FutureBuilder<UsageStats>(
-                    future: widget.usageStore.loadStats(),
+                    future: _statsFuture,
                     builder: (context, snapshot) {
                       final stats = snapshot.data ?? UsageStats.empty;
                       final loading =

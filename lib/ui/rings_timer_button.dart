@@ -1,13 +1,19 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../screens/home_timer_controller.dart';
 import 'layout.dart';
 
 class RingsTimerButton extends StatefulWidget {
   final String timeText;
-  final double progress; // 0.0 to 1.0
+
+  /// Время окончания отсчёта; null — таймер не идёт.
+  final DateTime? endsAt;
+  final Duration totalDuration;
   final TimerState state;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
@@ -18,7 +24,8 @@ class RingsTimerButton extends StatefulWidget {
   const RingsTimerButton({
     super.key,
     required this.timeText,
-    required this.progress,
+    required this.endsAt,
+    required this.totalDuration,
     required this.state,
     required this.onTap,
     required this.onLongPress,
@@ -35,7 +42,9 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   late AnimationController _pulseController;
   late AnimationController _fadeController;
   late AnimationController _resurfaceController;
-  late AnimationController _progressController;
+
+  /// «Выезд» дуги при старте и «уезд» при сбросе.
+  late AnimationController _revealController;
 
   // Press animation (UI-only, independent of timer state)
   late Animation<double> _pressScale;
@@ -49,8 +58,12 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   late Animation<double> _resurfaceOpacity;
   late Animation<double> _resurfaceScale;
 
-  // Smooth progress animation
-  late Animation<double> _progressAnimation;
+  // Continuous progress: repaints the canvas only, no widget rebuilds.
+  final ValueNotifier<double> _progress = ValueNotifier(0);
+  double _rawProgress = 0;
+  late final Ticker _frameTicker;
+  Timer? _slowTimer;
+  double _diameter = AppMetrics.minCircle;
 
   @override
   void initState() {
@@ -98,12 +111,15 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
       CurvedAnimation(parent: _resurfaceController, curve: Curves.easeOutBack),
     );
 
-    // Animate progress changes smoothly between ticks
-    _progressController = AnimationController(
+    _revealController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
-    );
-    _progressAnimation = AlwaysStoppedAnimation(widget.progress);
+      // Таймер, восстановленный после перезапуска, показываем сразу.
+      value: widget.endsAt != null ? 1 : 0,
+    )..addListener(_publishProgress);
+
+    _frameTicker = createTicker((_) => _updateProgress());
+    _syncProgressDriver();
 
     _handleStateChange(widget.state);
   }
@@ -111,22 +127,61 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   @override
   void didUpdateWidget(RingsTimerButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.progress != widget.progress) {
-      _animateProgress(oldWidget.progress, widget.progress);
+    if (oldWidget.endsAt != widget.endsAt ||
+        oldWidget.totalDuration != widget.totalDuration) {
+      if (oldWidget.endsAt == null && widget.endsAt != null) {
+        _revealController.forward(from: 0);
+      } else if (oldWidget.endsAt != null && widget.endsAt == null) {
+        if (widget.state == TimerState.completed) {
+          _rawProgress = 0;
+        } else {
+          _revealController.reverse();
+        }
+      }
+      _syncProgressDriver();
     }
     if (oldWidget.state != widget.state) {
       _handleStateChange(widget.state);
     }
   }
 
-  void _animateProgress(double from, double to) {
-    _progressController.stop();
-    _progressAnimation = Tween<double>(begin: from, end: to).animate(
-      CurvedAnimation(parent: _progressController, curve: Curves.easeOutCubic),
-    );
-    _progressController
-      ..value = 0
-      ..forward();
+  /// Подбирает частоту обновления дуги: короткий таймер (дуга бежит быстро) —
+  /// каждый кадр; длинный — примерно на каждые полпикселя движения.
+  /// Так 5-минутный отсчёт не гоняет 60–120 кадров/с ради сдвига в 0,05 px.
+  void _syncProgressDriver() {
+    _frameTicker.stop();
+    _slowTimer?.cancel();
+    _slowTimer = null;
+    if (widget.endsAt == null) {
+      _publishProgress();
+      return;
+    }
+    _updateProgress();
+
+    final totalMs = widget.totalDuration.inMilliseconds;
+    final circumference = math.pi * _diameter;
+    final msPerHalfPixel = totalMs / (circumference * 2);
+    if (msPerHalfPixel <= 33) {
+      _frameTicker.start();
+    } else {
+      final interval =
+          Duration(milliseconds: msPerHalfPixel.clamp(33, 250).round());
+      _slowTimer = Timer.periodic(interval, (_) => _updateProgress());
+    }
+  }
+
+  void _updateProgress() {
+    final endsAt = widget.endsAt;
+    final totalMs = widget.totalDuration.inMilliseconds;
+    if (endsAt == null || totalMs <= 0) return;
+    final leftMs = endsAt.difference(DateTime.now()).inMilliseconds;
+    _rawProgress = (leftMs / totalMs).clamp(0.0, 1.0);
+    _publishProgress();
+  }
+
+  void _publishProgress() {
+    final reveal = Curves.easeOutCubic.transform(_revealController.value);
+    _progress.value = _rawProgress * reveal;
   }
 
   void _playPress() {
@@ -178,7 +233,10 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
     _pulseController.dispose();
     _fadeController.dispose();
     _resurfaceController.dispose();
-    _progressController.dispose();
+    _revealController.dispose();
+    _frameTicker.dispose();
+    _slowTimer?.cancel();
+    _progress.dispose();
     super.dispose();
   }
 
@@ -186,6 +244,15 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
   Widget build(BuildContext context) {
     final metrics = AppMetrics.of(context);
     final size = metrics.timerButtonSize; // ~150-200px
+    if (size != _diameter) {
+      _diameter = size;
+      // Частота обновления зависит от длины окружности.
+      if (widget.endsAt != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _syncProgressDriver();
+        });
+      }
+    }
 
     return Semantics(
       button: true,
@@ -211,7 +278,6 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
                     _pulseController,
                     _fadeController,
                     _resurfaceController,
-                    _progressController,
                   ]),
                   builder: (context, _) {
                     double scale = 1.0;
@@ -231,10 +297,6 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
                       }
                     }
 
-                    final progress = _progressController.isAnimating
-                        ? _progressAnimation.value
-                        : widget.progress;
-
                     if (widget.state == TimerState.completed &&
                         _resurfaceController.isAnimating) {
                       scale *= _resurfaceScale.value;
@@ -247,7 +309,7 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
                         child: CustomPaint(
                           size: Size(size, size),
                           painter: _RingsPainter(
-                            progress: progress,
+                            progress: _progress,
                             state: widget.state,
                             fadeProgress: _fadeController.value,
                             resurfaceProgress: _resurfaceController.value,
@@ -277,7 +339,8 @@ class _RingsTimerButtonState extends State<RingsTimerButton>
 }
 
 class _RingsPainter extends CustomPainter {
-  final double progress; // 0.0 to 1.0
+  /// 0.0–1.0; при изменении холст перерисовывается без перестройки виджетов.
+  final ValueListenable<double> progress;
   final TimerState state;
   final double fadeProgress; // 0.0 to 1.0
   final double resurfaceProgress; // 0.0 to 1.0
@@ -287,10 +350,11 @@ class _RingsPainter extends CustomPainter {
     required this.state,
     required this.fadeProgress,
     required this.resurfaceProgress,
-  });
+  }) : super(repaint: progress);
 
   @override
   void paint(Canvas canvas, Size size) {
+    final progress = this.progress.value;
     final center = Offset(size.width / 2, size.height / 2);
     final baseRadius = size.width / 2 - 10;
     final opacity = _getBaseOpacity();
