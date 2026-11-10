@@ -1,0 +1,53 @@
+name: Apple builds
+
+on:
+  push:
+    branches: [main, 'feat/apple-platforms']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.0
+          cache: true
+      - run: flutter config --no-enable-swift-package-manager
+      - run: flutter pub get
+      - run: flutter build macos --release
+      # ditto preserves the app bundle's symlinks and executable permissions.
+      - run: ditto -c -k --sequesterRsrc --keepParent build/macos/Build/Products/Release/Countdown.app Countdown-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Countdown-macOS
+          path: Countdown-macOS.zip
+          if-no-files-found: error
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.0
+          cache: true
+      - run: flutter config --no-enable-swift-package-manager
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign
+      - run: flutter build ios --simulator --debug
+      - run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphonesimulator/Runner.app Countdown-iOS-simulator.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Countdown-iOS-simulator
+          path: Countdown-iOS-simulator.zip
+          if-no-files-found: error
