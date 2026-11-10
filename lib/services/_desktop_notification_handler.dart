@@ -13,7 +13,7 @@ class DesktopNotificationHandler {
 
   static bool get isDesktop {
     if (kIsWeb) return false;
-    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    return Platform.isWindows || Platform.isLinux;
   }
 
   Future<void> init() async {

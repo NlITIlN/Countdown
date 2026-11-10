@@ -40,13 +40,13 @@ Folder layout and responsibilities of the main Dart files.
 
 ### Services (`services/`)
 - `notification_service.dart` — cross-platform facade: `init()`, `requestPermission()`, `scheduleSteps()` (schedules the completion notification), `cancelSteps()`, `showDone()`, `showBadge()`, `showAchievement()`.
-- `_mobile_notification_handler.dart` — Android / iOS via `flutter_local_notifications` + timezone. One Android channel per sound / vibration combination (on Android 8+ these are channel settings). Exact alarms when allowed, inexact otherwise.
-- `_desktop_notification_handler.dart` — Windows / macOS / Linux toasts via `local_notifier`, scheduling via in-process timers.
+- `_native_notification_handler.dart` — Android / iOS / macOS via `flutter_local_notifications` + timezone. One Android channel per sound / vibration combination (on Android 8+ these are channel settings). Exact alarms when allowed, inexact otherwise.
+- `_desktop_notification_handler.dart` — Windows / Linux toasts via `local_notifier`, scheduling via in-process timers.
 - `notification_prefs.dart` — sound / vibration settings; per-type "achievement shown today" flags.
 - `timer_prefs.dart` — timer limits in seconds (`minSeconds` 10, `maxSeconds` 300, `stepSeconds` 10, `clampSeconds`), saved duration (migrates the old minutes key) and `endsAt`.
 - `usage_store.dart` — completion timestamps (last 500) plus an all-time counter; tolerant to corrupted data.
 - `theme_prefs.dart` — saved theme.
-- `screen_awake.dart` — keeps the screen on during a countdown via the `countdown/screen` channel (native side: `MainActivity.kt`, `AppDelegate.swift`, `windows/runner/flutter_window.cpp`).
+- `screen_awake.dart` — keeps the screen on during a countdown via the `countdown/screen` channel (native side: `MainActivity.kt`, `AppDelegate.swift`, `macos/Runner/MainFlutterWindow.swift`, `windows/runner/flutter_window.cpp`).
 
 ### UI primitives (`ui/`)
 - `layout.dart` — `AppMetrics` (sizes derived from the screen; reference: iPhone 12 mini) and `ResponsiveShell` (centered column on wide screens).

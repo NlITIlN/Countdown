@@ -1,5 +1,5 @@
 name: countdown
-description: Minimal countdown timer for Android and iOS.
+description: Minimal countdown timer for Android, iOS, macOS and Windows.
 publish_to: 'none'
 version: 0.2.0+1
 
