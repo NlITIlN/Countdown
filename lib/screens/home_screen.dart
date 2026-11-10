@@ -153,21 +153,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         onAnalytics: () async {
                           await Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (ctx) => Scaffold(
-                                backgroundColor:
-                                    Theme.of(context).scaffoldBackgroundColor,
-                                appBar: AppBar(
-                                  backgroundColor: Colors.transparent,
-                                  elevation: 0,
-                                  title: Text(s.analytics.toLowerCase()),
-                                ),
-                                body: SafeArea(
-                                  child: AnalyticsScreen(
-                                    strings: s,
-                                    usageStore: widget.usageStore,
+                              builder: (ctx) {
+                                final s = S.forRu(
+                                    Localizations.localeOf(ctx).languageCode ==
+                                        'ru');
+                                return Scaffold(
+                                  backgroundColor:
+                                      Theme.of(context).scaffoldBackgroundColor,
+                                  appBar: AppBar(
+                                    backgroundColor: Colors.transparent,
+                                    elevation: 0,
+                                    title: Text(s.analytics.toLowerCase()),
                                   ),
-                                ),
-                              ),
+                                  body: SafeArea(
+                                    child: AnalyticsScreen(
+                                      strings: s,
+                                      usageStore: widget.usageStore,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           );
                         },
@@ -175,43 +180,50 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           final seconds = _timerController.totalSeconds;
                           await Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (ctx) => Scaffold(
-                                backgroundColor:
-                                    Theme.of(context).scaffoldBackgroundColor,
-                                appBar: AppBar(
-                                  backgroundColor: Colors.transparent,
-                                  elevation: 0,
-                                  title: Text(s.settings.toLowerCase()),
-                                ),
-                                body: SafeArea(
-                                  child: ControlPanel(
-                                    strings: s,
-                                    initialSeconds: seconds,
-                                    running: _timerController.running,
-                                    notificationPrefs: widget.notificationPrefs,
-                                    onTimerApply: (value) async {
-                                      if (value != seconds) {
-                                        await _setDuration(value);
-                                      }
-                                    },
-                                    onLocaleChanged: widget.onLocaleChanged,
-                                    themeMode: widget.themeMode,
-                                    onThemeChanged: widget.onThemeChanged,
-                                    onNotificationsChanged: _timerController
-                                        .setNotificationsEnabled,
-                                    keepScreenOn:
-                                        widget.timerPrefs.keepScreenOn(),
-                                    onKeepScreenOnChanged:
-                                        _timerController.setKeepScreenOn,
-                                    onClearStatistics: widget.usageStore.clear,
-                                    onReset: _timerController.running
-                                        ? () async {
-                                            await _timerController.reset();
-                                          }
-                                        : null,
+                              builder: (ctx) {
+                                final s = S.forRu(
+                                    Localizations.localeOf(ctx).languageCode ==
+                                        'ru');
+                                return Scaffold(
+                                  backgroundColor:
+                                      Theme.of(context).scaffoldBackgroundColor,
+                                  appBar: AppBar(
+                                    backgroundColor: Colors.transparent,
+                                    elevation: 0,
+                                    title: Text(s.settings.toLowerCase()),
                                   ),
-                                ),
-                              ),
+                                  body: SafeArea(
+                                    child: ControlPanel(
+                                      strings: s,
+                                      initialSeconds: seconds,
+                                      running: _timerController.running,
+                                      notificationPrefs:
+                                          widget.notificationPrefs,
+                                      onTimerApply: (value) async {
+                                        if (value != seconds) {
+                                          await _setDuration(value);
+                                        }
+                                      },
+                                      onLocaleChanged: widget.onLocaleChanged,
+                                      themeMode: widget.themeMode,
+                                      onThemeChanged: widget.onThemeChanged,
+                                      onNotificationsChanged: _timerController
+                                          .setNotificationsEnabled,
+                                      keepScreenOn:
+                                          widget.timerPrefs.keepScreenOn(),
+                                      onKeepScreenOnChanged:
+                                          _timerController.setKeepScreenOn,
+                                      onClearStatistics:
+                                          widget.usageStore.clear,
+                                      onReset: _timerController.running
+                                          ? () async {
+                                              await _timerController.reset();
+                                            }
+                                          : null,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           );
                         },
