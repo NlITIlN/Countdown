@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// «Не гасить экран» во время отсчёта. Нативная сторона — канал
-/// `countdown/screen` в MainActivity.kt, AppDelegate.swift, flutter_window.cpp.
+/// `countdown/screen` в MainActivity.kt, AppDelegate.swift, MainFlutterWindow.swift, flutter_window.cpp.
 class ScreenAwake {
   static const _channel = MethodChannel('countdown/screen');
 

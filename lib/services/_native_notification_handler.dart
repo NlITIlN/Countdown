@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -8,7 +6,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../l10n/strings.dart';
 
-class MobileNotificationHandler {
+class NativeNotificationHandler {
   /// Канал из первых версий: на Android 8+ звук и вибрацию задаёт канал,
   /// поэтому вместо одного канала — по каналу на каждое сочетание настроек.
   static const _legacyChannelId = 'countdown_steps';
@@ -40,10 +38,12 @@ class MobileNotificationHandler {
       _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
 
-  static bool get isMobile {
-    if (kIsWeb) return false;
-    return Platform.isAndroid || Platform.isIOS;
-  }
+  /// System scheduling survives app termination on iOS and macOS.
+  static bool get isSupported =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS);
 
   Future<void> init() async {
     if (_ready) return;
@@ -65,7 +65,7 @@ class MobileNotificationHandler {
       );
 
       await _plugin.initialize(
-        const InitializationSettings(android: android, iOS: ios),
+        const InitializationSettings(android: android, iOS: ios, macOS: ios),
       );
 
       final androidPlugin = _android;
@@ -89,7 +89,7 @@ class MobileNotificationHandler {
 
       _ready = true;
     } catch (e, st) {
-      debugPrint('Mobile notifications init failed: $e\n$st');
+      debugPrint('Native notifications init failed: $e\n$st');
     }
   }
 
@@ -97,12 +97,17 @@ class MobileNotificationHandler {
     if (!_ready) return;
 
     try {
-      if (Platform.isAndroid) {
+      if (defaultTargetPlatform == TargetPlatform.android) {
         await _android?.requestNotificationsPermission();
-      } else if (Platform.isIOS) {
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
         await _plugin
             .resolvePlatformSpecificImplementation<
                 IOSFlutterLocalNotificationsPlugin>()
+            ?.requestPermissions(alert: true, sound: true);
+      } else if (defaultTargetPlatform == TargetPlatform.macOS) {
+        await _plugin
+            .resolvePlatformSpecificImplementation<
+                MacOSFlutterLocalNotificationsPlugin>()
             ?.requestPermissions(alert: true, sound: true);
       }
     } catch (e) {
@@ -198,7 +203,7 @@ class MobileNotificationHandler {
     if (at.isBefore(DateTime.now())) return false;
 
     // Точное время, если система разрешает; иначе — inexact (может опоздать).
-    final exact = Platform.isAndroid &&
+    final exact = defaultTargetPlatform == TargetPlatform.android &&
         (await _android?.canScheduleExactNotifications() ?? false);
 
     await _plugin.zonedSchedule(
@@ -228,6 +233,11 @@ class MobileNotificationHandler {
         priority: Priority.high,
         playSound: playSound,
         enableVibration: vibrate,
+      ),
+      macOS: DarwinNotificationDetails(
+        presentSound: playSound,
+        presentAlert: true,
+        presentBadge: false,
       ),
       iOS: DarwinNotificationDetails(
         presentSound: playSound,

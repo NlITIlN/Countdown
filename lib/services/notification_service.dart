@@ -1,13 +1,13 @@
 import '../l10n/strings.dart';
 import '_desktop_notification_handler.dart';
-import '_mobile_notification_handler.dart';
+import '_native_notification_handler.dart';
 
 class NotificationService {
   static const idDone = 100;
   static const idBadge = 103;
   static const idAchievementStart = 200; // диапазон для достижений
 
-  final MobileNotificationHandler _mobile = MobileNotificationHandler();
+  final NativeNotificationHandler _native = NativeNotificationHandler();
   final DesktopNotificationHandler _desktop = DesktopNotificationHandler();
 
   Future<void>? _initFuture;
@@ -18,8 +18,8 @@ class NotificationService {
   Future<void> init() => _initFuture ??= _init();
 
   Future<void> _init() async {
-    if (MobileNotificationHandler.isMobile) {
-      await _mobile.init();
+    if (NativeNotificationHandler.isSupported) {
+      await _native.init();
     }
 
     if (DesktopNotificationHandler.isDesktop) {
@@ -29,8 +29,8 @@ class NotificationService {
 
   Future<void> requestPermission() async {
     await init();
-    if (MobileNotificationHandler.isMobile) {
-      await _mobile.requestPermission();
+    if (NativeNotificationHandler.isSupported) {
+      await _native.requestPermission();
     }
   }
 
@@ -42,8 +42,8 @@ class NotificationService {
     bool vibrate = true,
   }) async {
     await init();
-    if (MobileNotificationHandler.isMobile) {
-      await _mobile.scheduleSteps(
+    if (NativeNotificationHandler.isSupported) {
+      await _native.scheduleSteps(
         endsAt: endsAt,
         totalSeconds: totalSeconds,
         isRu: isRu,
@@ -65,7 +65,7 @@ class NotificationService {
 
   Future<void> cancelSteps() async {
     await init();
-    await _mobile.cancelSteps();
+    await _native.cancelSteps();
     await _desktop.cancelSteps();
   }
 
@@ -82,9 +82,9 @@ class NotificationService {
     final title = s.timerDoneTitle;
     final body = s.timerDoneBody;
 
-    if (MobileNotificationHandler.isMobile) {
-      if (!await _mobile.claimDone()) return;
-      await _mobile.show(
+    if (NativeNotificationHandler.isSupported) {
+      if (!await _native.claimDone()) return;
+      await _native.show(
         title,
         body,
         id: idDone,
@@ -114,8 +114,8 @@ class NotificationService {
     final title = s.badgeNotificationTitle;
     final body = s.badgeNotificationBody(count);
 
-    if (MobileNotificationHandler.isMobile) {
-      await _mobile.show(
+    if (NativeNotificationHandler.isSupported) {
+      await _native.show(
         title,
         body,
         id: idBadge,
@@ -144,8 +144,8 @@ class NotificationService {
     // Генерируем уникальный ID для каждого достижения
     final id = idAchievementStart + DateTime.now().millisecond % 100;
 
-    if (MobileNotificationHandler.isMobile) {
-      await _mobile.show(
+    if (NativeNotificationHandler.isSupported) {
+      await _native.show(
         title,
         body,
         id: id,
